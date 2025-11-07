@@ -174,12 +174,13 @@ impl HotkeyManager {
 
                     let now = Instant::now();
                     unsafe {
-                        // Éviter les répétitions trop rapides (dédoublonnage)
-                        // Augmentation du seuil à 300ms pour éviter les doubles détections
+                        // Filtrer uniquement les vrais duplicates système (< 50ms)
+                        // Les doubles détections système arrivent généralement en < 30-50ms
+                        // tandis que les appuis humains rapides sont espacés d'au moins 100ms
                         if let Some(last_time) = LAST_EVENT_TIME {
-                            if now.duration_since(last_time).as_millis() < 300 &&
-                               LAST_EVENT_ID == event.id {
-                                println!("[HotkeyManager] Event ignored (duplicate): {:?}", event.id);
+                            let elapsed_ms = now.duration_since(last_time).as_millis();
+                            if elapsed_ms < 50 && LAST_EVENT_ID == event.id {
+                                println!("[HotkeyManager] Event ignored (duplicate système, {}ms): {:?}", elapsed_ms, event.id);
                                 continue;
                             }
                         }
