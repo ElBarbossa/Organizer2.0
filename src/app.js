@@ -62,6 +62,10 @@ async function init() {
     await initTauriApis();
 
     log('Initialisation de l\'application...');
+
+    // Charger la configuration des hotkeys depuis localStorage
+    loadSavedHotkeyConfig();
+
     setupTabs();
     setupEventListeners();
     await loadWindows();
@@ -245,35 +249,35 @@ function renderWindowList() {
 
 // Drag and Drop handlers
 function handleDragStart(e) {
-    currentDraggedItem = this;
-    this.classList.add('dragging');
+    currentDraggedItem = e.currentTarget;
+    e.currentTarget.classList.add('dragging');
     e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/html', this.innerHTML);
+    e.dataTransfer.setData('text/html', e.currentTarget.innerHTML);
     log('Début du glisser-déposer');
 }
 
 function handleDragOver(e) {
-    if (e.preventDefault) {
-        e.preventDefault();
-    }
+    e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
 
-    const afterElement = getDragAfterElement(this.parentElement, e.clientY);
+    const container = e.currentTarget.parentElement;
+    const afterElement = getDragAfterElement(container, e.clientY);
     const draggable = currentDraggedItem;
 
-    if (afterElement == null) {
-        this.parentElement.appendChild(draggable);
-    } else {
-        this.parentElement.insertBefore(draggable, afterElement);
+    if (draggable && container) {
+        if (afterElement == null) {
+            container.appendChild(draggable);
+        } else {
+            container.insertBefore(draggable, afterElement);
+        }
     }
 
     return false;
 }
 
 function handleDrop(e) {
-    if (e.stopPropagation) {
-        e.stopPropagation();
-    }
+    e.stopPropagation();
+    e.preventDefault();
 
     log('Élément déposé, mise à jour de l\'ordre');
     updateWindowOrder();
@@ -281,7 +285,7 @@ function handleDrop(e) {
 }
 
 function handleDragEnd(e) {
-    this.classList.remove('dragging');
+    e.currentTarget.classList.remove('dragging');
     currentDraggedItem = null;
     log('Fin du glisser-déposer');
 }
@@ -348,7 +352,45 @@ try {
 async function setupHotkeys() {
     log('Configuration des raccourcis clavier...');
     try {
-        await invoke('setup_default_hotkeys');
+        // Vérifier s'il y a une configuration personnalisée sauvegardée
+        const saved = localStorage.getItem('rustfocus_hotkey_config');
+
+        if (saved) {
+            // Appliquer la configuration personnalisée
+            log('Application de la configuration personnalisée...');
+            const customHotkeys = [];
+
+            customHotkeys.push({
+                id: 1,
+                modifiers: 0,
+                key_code: hotkeyConfig.next.vkCode,
+                action: { NextWindow: {} }
+            });
+
+            customHotkeys.push({
+                id: 2,
+                modifiers: 0,
+                key_code: hotkeyConfig.prev.vkCode,
+                action: { PreviousWindow: {} }
+            });
+
+            for (let i = 0; i < 8; i++) {
+                const key = ['f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8'][i];
+                customHotkeys.push({
+                    id: 10 + i,
+                    modifiers: 0,
+                    key_code: hotkeyConfig[key].vkCode,
+                    action: { DirectWindow: i }
+                });
+            }
+
+            await invoke('setup_custom_hotkeys', { hotkeys: customHotkeys });
+            log('✓ Configuration personnalisée appliquée');
+        } else {
+            // Appliquer la configuration par défaut
+            await invoke('setup_default_hotkeys');
+        }
+
         log('✓ Raccourcis clavier ACTIFS:');
         log('  - Page Down: Fenêtre suivante');
         log('  - Page Up: Fenêtre précédente');
@@ -586,6 +628,36 @@ const hotkeyConfig = {
     f8: { key: 'F8', vkCode: 0x77, name: 'F8' },
 };
 
+// Charger la configuration sauvegardée depuis localStorage
+function loadSavedHotkeyConfig() {
+    try {
+        const saved = localStorage.getItem('rustfocus_hotkey_config');
+        if (saved) {
+            const config = JSON.parse(saved);
+            log('Configuration des hotkeys chargée depuis localStorage:', config);
+
+            // Restaurer la configuration
+            if (config.hotkeyConfig) {
+                Object.assign(hotkeyConfig, config.hotkeyConfig);
+
+                // Mettre à jour l'affichage une fois que le DOM est prêt
+                setTimeout(() => {
+                    for (const [id, hotkeyInfo] of Object.entries(config.hotkeyConfig)) {
+                        const kbdElement = document.getElementById(`hotkey-${id}`);
+                        if (kbdElement) {
+                            kbdElement.textContent = hotkeyInfo.name;
+                        }
+                    }
+                }, 100);
+
+                log('✓ Configuration des hotkeys restaurée');
+            }
+        }
+    } catch (error) {
+        logError('Erreur lors du chargement de la configuration:', error);
+    }
+}
+
 // État de la configuration
 let currentlyConfiguring = null;
 let keyListener = null;
@@ -755,6 +827,15 @@ try {
     await invoke('setup_custom_hotkeys', { hotkeys: customHotkeys });
 
     log('✓ Raccourcis mis à jour avec succès !');
+
+    // Sauvegarder la configuration dans localStorage pour persistance
+    const configToSave = {
+        hotkeyConfig: hotkeyConfig,
+        timestamp: Date.now()
+    };
+    localStorage.setItem('rustfocus_hotkey_config', JSON.stringify(configToSave));
+    log('✓ Configuration sauvegardée dans localStorage');
+
     updateStatusText('Raccourcis mis à jour avec succès ✓');
 
     alert('Raccourcis mis à jour avec succès !\n\nLes nouveaux raccourcis sont maintenant actifs.');
