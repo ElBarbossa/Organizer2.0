@@ -257,11 +257,8 @@ function renderWindowList() {
 
 // Custom Drag and Drop handlers (compatible with Tauri/WebView2)
 function handleMouseDown(e) {
-    console.log('[DRAG] handleMouseDown called, target:', e.target, 'closest button:', e.target.closest('.icon-btn'));
-
     // Only start drag if clicking on the main area (not buttons)
     if (e.target.closest('.icon-btn')) {
-        console.log('[DRAG] Ignoring click on button');
         return; // Ignore clicks on buttons
     }
 
@@ -269,8 +266,6 @@ function handleMouseDown(e) {
     currentDraggedItem = e.currentTarget;
     dragStartX = e.clientX;
     dragStartY = e.clientY;
-
-    console.log('[DRAG] handleMouseDown on item:', currentDraggedItem.dataset.handle, 'at position:', dragStartX, dragStartY);
 
     // Prevent default to avoid any browser drag behavior
     e.preventDefault();
@@ -282,7 +277,6 @@ function handleMouseMove(e) {
     }
 
     if (isDragging) {
-        console.log('[DRAG] Already dragging, handling global move');
         handleGlobalMouseMove(e);
         return;
     }
@@ -291,73 +285,75 @@ function handleMouseMove(e) {
     const deltaX = Math.abs(e.clientX - dragStartX);
     const deltaY = Math.abs(e.clientY - dragStartY);
 
-    console.log('[DRAG] Mouse moved, delta:', deltaX, deltaY);
-
     if (deltaX > 5 || deltaY > 5) {
-        console.log('[DRAG] Threshold reached, starting drag');
-
         // Start dragging
         isDragging = true;
         currentDraggedItem.classList.add('dragging');
-        console.log('[DRAG] Started dragging item:', currentDraggedItem.dataset.handle);
 
         // Add global mouse event listeners
         document.addEventListener('mousemove', handleGlobalMouseMove);
         document.addEventListener('mouseup', handleMouseUp);
 
-        // Prevent text selection
+        // Prevent text selection and unwanted behaviors
         document.body.style.userSelect = 'none';
+        document.body.style.cursor = 'move';
     }
 }
 
 function handleGlobalMouseMove(e) {
-    console.log('[DRAG] handleGlobalMouseMove, clientY:', e.clientY);
-
-    if (!isDragging || !currentDraggedItem) {
-        console.log('[DRAG] No dragging state or no current item');
-        return;
-    }
+    if (!isDragging || !currentDraggedItem) return;
 
     const container = currentDraggedItem.closest('.window-list');
-    if (!container) {
-        console.log('[DRAG] No container found');
-        return;
-    }
+    if (!container) return;
 
-    console.log('[DRAG] Container found, calculating new position');
+    // Prevent scrolling issues by checking if we're over the container
+    const containerRect = container.getBoundingClientRect();
+    const isOverContainer = e.clientX >= containerRect.left &&
+                          e.clientX <= containerRect.right &&
+                          e.clientY >= containerRect.top &&
+                          e.clientY <= containerRect.bottom;
+
+    if (!isOverContainer) return;
+
+    // Prevent default to stop any unwanted scrolling
+    e.preventDefault();
 
     // Déterminer où insérer l'élément
     const afterElement = getDragAfterElement(container, e.clientY);
 
-    console.log('[DRAG] After element:', afterElement ? afterElement.dataset.handle : 'null (append to end)');
+    // Only reorder if the position actually changes
+    const currentIndex = Array.from(container.children).indexOf(currentDraggedItem);
+    let newIndex;
 
     if (afterElement == null) {
-        container.appendChild(currentDraggedItem);
-        console.log('[DRAG] Appended to end');
+        newIndex = container.children.length - 1;
     } else {
-        container.insertBefore(currentDraggedItem, afterElement);
-        console.log('[DRAG] Inserted before:', afterElement.dataset.handle);
+        newIndex = Array.from(container.children).indexOf(afterElement) - 1;
+    }
+
+    if (newIndex !== currentIndex) {
+        if (afterElement == null) {
+            container.appendChild(currentDraggedItem);
+        } else {
+            container.insertBefore(currentDraggedItem, afterElement);
+        }
     }
 }
 
 function handleMouseUp(e) {
-    console.log('[DRAG] handleMouseUp called, isDragging:', isDragging);
-
     if (!isDragging) {
-        console.log('[DRAG] Not dragging, cleaning up');
         currentDraggedItem = null;
         return;
     }
-
-    console.log('[DRAG] handleMouseUp - finishing drag for item:', currentDraggedItem ? currentDraggedItem.dataset.handle : 'none');
 
     // Remove dragging state
     if (currentDraggedItem) {
         currentDraggedItem.classList.remove('dragging');
     }
 
-    // Re-enable text selection
+    // Reset body styles
     document.body.style.userSelect = '';
+    document.body.style.cursor = '';
 
     // Update window order
     log('Élément déposé, mise à jour de l\'ordre');
@@ -371,7 +367,6 @@ function handleMouseUp(e) {
     document.removeEventListener('mousemove', handleGlobalMouseMove);
     document.removeEventListener('mouseup', handleMouseUp);
 
-    console.log('[DRAG] Drag finished completely');
     log('Fin du glisser-déposer');
 }
 
