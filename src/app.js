@@ -257,8 +257,11 @@ function renderWindowList() {
 
 // Custom Drag and Drop handlers (compatible with Tauri/WebView2)
 function handleMouseDown(e) {
+    console.log('[DRAG] handleMouseDown called, target:', e.target, 'closest button:', e.target.closest('.icon-btn'));
+
     // Only start drag if clicking on the main area (not buttons)
     if (e.target.closest('.icon-btn')) {
+        console.log('[DRAG] Ignoring click on button');
         return; // Ignore clicks on buttons
     }
 
@@ -267,56 +270,94 @@ function handleMouseDown(e) {
     dragStartX = e.clientX;
     dragStartY = e.clientY;
 
-    console.log('[DRAG] handleMouseDown on:', currentDraggedItem.dataset.handle);
+    console.log('[DRAG] handleMouseDown on item:', currentDraggedItem.dataset.handle, 'at position:', dragStartX, dragStartY);
+
+    // Prevent default to avoid any browser drag behavior
+    e.preventDefault();
 }
 
 function handleMouseMove(e) {
-    if (!currentDraggedItem || isDragging) return;
+    if (!currentDraggedItem) {
+        return;
+    }
+
+    if (isDragging) {
+        console.log('[DRAG] Already dragging, handling global move');
+        handleGlobalMouseMove(e);
+        return;
+    }
 
     // Check if moved enough to start dragging
     const deltaX = Math.abs(e.clientX - dragStartX);
     const deltaY = Math.abs(e.clientY - dragStartY);
 
+    console.log('[DRAG] Mouse moved, delta:', deltaX, deltaY);
+
     if (deltaX > 5 || deltaY > 5) {
+        console.log('[DRAG] Threshold reached, starting drag');
+
         // Start dragging
         isDragging = true;
         currentDraggedItem.classList.add('dragging');
-        console.log('[DRAG] Started dragging:', currentDraggedItem.dataset.handle);
+        console.log('[DRAG] Started dragging item:', currentDraggedItem.dataset.handle);
 
         // Add global mouse event listeners
         document.addEventListener('mousemove', handleGlobalMouseMove);
         document.addEventListener('mouseup', handleMouseUp);
+
+        // Prevent text selection
+        document.body.style.userSelect = 'none';
     }
 }
 
 function handleGlobalMouseMove(e) {
-    if (!isDragging || !currentDraggedItem) return;
+    console.log('[DRAG] handleGlobalMouseMove, clientY:', e.clientY);
+
+    if (!isDragging || !currentDraggedItem) {
+        console.log('[DRAG] No dragging state or no current item');
+        return;
+    }
 
     const container = currentDraggedItem.closest('.window-list');
-    if (!container) return;
+    if (!container) {
+        console.log('[DRAG] No container found');
+        return;
+    }
+
+    console.log('[DRAG] Container found, calculating new position');
 
     // Déterminer où insérer l'élément
     const afterElement = getDragAfterElement(container, e.clientY);
 
+    console.log('[DRAG] After element:', afterElement ? afterElement.dataset.handle : 'null (append to end)');
+
     if (afterElement == null) {
         container.appendChild(currentDraggedItem);
+        console.log('[DRAG] Appended to end');
     } else {
         container.insertBefore(currentDraggedItem, afterElement);
+        console.log('[DRAG] Inserted before:', afterElement.dataset.handle);
     }
 }
 
 function handleMouseUp(e) {
+    console.log('[DRAG] handleMouseUp called, isDragging:', isDragging);
+
     if (!isDragging) {
+        console.log('[DRAG] Not dragging, cleaning up');
         currentDraggedItem = null;
         return;
     }
 
-    console.log('[DRAG] handleMouseUp - finishing drag');
+    console.log('[DRAG] handleMouseUp - finishing drag for item:', currentDraggedItem ? currentDraggedItem.dataset.handle : 'none');
 
     // Remove dragging state
     if (currentDraggedItem) {
         currentDraggedItem.classList.remove('dragging');
     }
+
+    // Re-enable text selection
+    document.body.style.userSelect = '';
 
     // Update window order
     log('Élément déposé, mise à jour de l\'ordre');
@@ -330,6 +371,7 @@ function handleMouseUp(e) {
     document.removeEventListener('mousemove', handleGlobalMouseMove);
     document.removeEventListener('mouseup', handleMouseUp);
 
+    console.log('[DRAG] Drag finished completely');
     log('Fin du glisser-déposer');
 }
 
