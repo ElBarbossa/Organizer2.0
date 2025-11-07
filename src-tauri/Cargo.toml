@@ -32,6 +32,7 @@ windows = { version = "0.52", features = [
     "Win32_System_ProcessStatus",
     "Win32_UI_WindowsAndMessaging",
     "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_Shell",
 ] }
 parking_lot = "0.12"
 anyhow = "1.0"
@@ -50,4 +51,5 @@ windows = { version = "0.52", features = [
     "Win32_System_ProcessStatus",
     "Win32_UI_WindowsAndMessaging",
     "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_Shell",
 ] }

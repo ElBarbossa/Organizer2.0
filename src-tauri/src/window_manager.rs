@@ -8,7 +8,7 @@ use windows::Win32::System::Threading::OpenProcess;
 use windows::Win32::System::Threading::PROCESS_QUERY_LIMITED_INFORMATION;
 use windows::Win32::UI::WindowsAndMessaging::{
     EnumWindows, GetClassNameW, GetWindowTextW, GetWindowThreadProcessId, IsWindowVisible,
-    SetForegroundWindow,
+    SetForegroundWindow, ShowWindow, SW_MINIMIZE, SW_RESTORE, SetWindowPos, SWP_NOMOVE, SWP_NOSIZE, HWND_BOTTOM,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -148,10 +148,17 @@ pub fn focus_window(handle: isize) -> Result<()> {
 }
 
 /// Update window Z-order based on character names order
-/// Windows orders taskbar buttons based on last activation time,
-/// so we focus windows in the desired order to update the taskbar
+/// Uses multiple techniques to reorder taskbar buttons:
+/// 1. Minimize all windows first
+/// 2. Restore them in reverse order (last to first)
+/// 3. Use SetWindowPos to update Z-order
 pub fn reorder_taskbar_windows(order: Vec<String>) -> Result<()> {
     println!("DEBUG: Starting taskbar window reordering for {} windows", order.len());
+
+    if order.is_empty() {
+        println!("DEBUG: No windows to reorder");
+        return Ok(());
+    }
 
     // First, detect all current Dofus windows
     let all_windows = detect_dofus_windows()?;
@@ -167,22 +174,67 @@ pub fn reorder_taskbar_windows(order: Vec<String>) -> Result<()> {
         window_map.insert(window.character_name.clone(), window.handle);
     }
 
-    // Focus windows in the desired order (first to last)
-    // Windows will update the taskbar order based on activation sequence
-    for (index, character_name) in order.iter().enumerate() {
+    // Collect ordered window handles
+    let mut ordered_handles = Vec::new();
+    for character_name in &order {
         if let Some(&handle) = window_map.get(character_name) {
-            println!("DEBUG: Focusing window {} ({}) - position {}", character_name, handle, index + 1);
-
-            unsafe {
-                let hwnd = HWND(handle);
-                SetForegroundWindow(hwnd);
-            }
-
-            // Small delay to ensure Windows processes the focus change
-            // 50ms should be enough for Windows to register the activation
-            std::thread::sleep(std::time::Duration::from_millis(50));
+            ordered_handles.push((character_name.clone(), handle));
         } else {
             println!("DEBUG: Window not found for character: {}", character_name);
+        }
+    }
+
+    if ordered_handles.is_empty() {
+        println!("DEBUG: No matching windows found to reorder");
+        return Ok(());
+    }
+
+    println!("DEBUG: Found {} windows to reorder", ordered_handles.len());
+
+    unsafe {
+        // Method 1: Minimize all windows first
+        println!("DEBUG: Step 1 - Minimizing all windows");
+        for (name, handle) in &ordered_handles {
+            let hwnd = HWND(*handle);
+            ShowWindow(hwnd, SW_MINIMIZE);
+            println!("DEBUG: Minimized window: {}", name);
+        }
+
+        // Small delay to ensure all windows are minimized
+        std::thread::sleep(std::time::Duration::from_millis(200));
+
+        // Method 2: Restore windows in REVERSE order (last to first)
+        // Windows adds newly activated windows to the end of the taskbar order
+        // So by restoring in reverse, we get the correct final order
+        println!("DEBUG: Step 2 - Restoring windows in reverse order");
+        for (name, handle) in ordered_handles.iter().rev() {
+            let hwnd = HWND(*handle);
+
+            // First, move to bottom of Z-order
+            SetWindowPos(
+                hwnd,
+                HWND_BOTTOM,
+                0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE
+            );
+
+            // Then restore the window
+            ShowWindow(hwnd, SW_RESTORE);
+            println!("DEBUG: Restored window: {}", name);
+
+            // Delay to ensure Windows processes each restore
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+
+        // Method 3: Final focus pass in correct order to reinforce the arrangement
+        println!("DEBUG: Step 3 - Final focus pass");
+        std::thread::sleep(std::time::Duration::from_millis(200));
+
+        for (name, handle) in &ordered_handles {
+            let hwnd = HWND(*handle);
+            SetForegroundWindow(hwnd);
+            println!("DEBUG: Focused window: {}", name);
+            std::thread::sleep(std::time::Duration::from_millis(50));
         }
     }
 
