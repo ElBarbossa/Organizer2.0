@@ -222,7 +222,15 @@ fn vk_to_code(vk: u32) -> Result<Code> {
         0x21 => Ok(Code::PageUp),
         0x22 => Ok(Code::PageDown),
 
-        // Function keys F1-F8
+        // Home/End
+        0x24 => Ok(Code::Home),
+        0x23 => Ok(Code::End),
+
+        // Insert/Delete
+        0x2D => Ok(Code::Insert),
+        0x2E => Ok(Code::Delete),
+
+        // Function keys F1-F12
         0x70 => Ok(Code::F1),
         0x71 => Ok(Code::F2),
         0x72 => Ok(Code::F3),
@@ -231,6 +239,16 @@ fn vk_to_code(vk: u32) -> Result<Code> {
         0x75 => Ok(Code::F6),
         0x76 => Ok(Code::F7),
         0x77 => Ok(Code::F8),
+        0x78 => Ok(Code::F9),
+        0x79 => Ok(Code::F10),
+        0x7A => Ok(Code::F11),
+        0x7B => Ok(Code::F12),
+
+        // Numpad
+        0x6A => Ok(Code::NumpadMultiply),
+        0x6B => Ok(Code::NumpadAdd),
+        0x6D => Ok(Code::NumpadSubtract),
+        0x6F => Ok(Code::NumpadDivide),
 
         _ => Err(anyhow::anyhow!("Unsupported virtual key code: 0x{:X}", vk)),
     }
@@ -241,6 +259,14 @@ pub mod vk_codes {
     pub const VK_PRIOR: u32 = 0x21;  // Page Up
     pub const VK_NEXT: u32 = 0x22;   // Page Down
 
+    // Home/End
+    pub const VK_END: u32 = 0x23;
+    pub const VK_HOME: u32 = 0x24;
+
+    // Insert/Delete
+    pub const VK_INSERT: u32 = 0x2D;
+    pub const VK_DELETE: u32 = 0x2E;
+
     // Function keys
     pub const VK_F1: u32 = 0x70;
     pub const VK_F2: u32 = 0x71;
@@ -250,4 +276,14 @@ pub mod vk_codes {
     pub const VK_F6: u32 = 0x75;
     pub const VK_F7: u32 = 0x76;
     pub const VK_F8: u32 = 0x77;
+    pub const VK_F9: u32 = 0x78;
+    pub const VK_F10: u32 = 0x79;
+    pub const VK_F11: u32 = 0x7A;
+    pub const VK_F12: u32 = 0x7B;
+
+    // Numpad
+    pub const VK_MULTIPLY: u32 = 0x6A;
+    pub const VK_ADD: u32 = 0x6B;
+    pub const VK_SUBTRACT: u32 = 0x6D;
+    pub const VK_DIVIDE: u32 = 0x6F;
 }
