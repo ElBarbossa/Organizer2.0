@@ -148,16 +148,45 @@ pub fn focus_window(handle: isize) -> Result<()> {
 }
 
 /// Update window Z-order based on character names order
+/// Windows orders taskbar buttons based on last activation time,
+/// so we focus windows in the desired order to update the taskbar
 pub fn reorder_taskbar_windows(order: Vec<String>) -> Result<()> {
-    // Note: Windows doesn't provide a direct API to reorder taskbar windows
-    // The taskbar order is typically managed by the system based on window activation order
-    // and user preferences. We could potentially use SetWindowPos with HWND_TOPMOST
-    // or other window positioning APIs, but this would be complex and potentially
-    // disruptive to the user experience.
+    println!("DEBUG: Starting taskbar window reordering for {} windows", order.len());
 
-    // For now, we'll focus on the logical ordering in our application
-    // and let the user manually reorder via Alt+Tab or taskbar if needed
-    println!("DEBUG: Window reordering requested for taskbar, but not directly supported by Windows API");
+    // First, detect all current Dofus windows
+    let all_windows = detect_dofus_windows()?;
+
+    if all_windows.is_empty() {
+        println!("DEBUG: No windows found to reorder");
+        return Ok(());
+    }
+
+    // Create a map of character names to window handles for quick lookup
+    let mut window_map = std::collections::HashMap::new();
+    for window in all_windows {
+        window_map.insert(window.character_name.clone(), window.handle);
+    }
+
+    // Focus windows in the desired order (first to last)
+    // Windows will update the taskbar order based on activation sequence
+    for (index, character_name) in order.iter().enumerate() {
+        if let Some(&handle) = window_map.get(character_name) {
+            println!("DEBUG: Focusing window {} ({}) - position {}", character_name, handle, index + 1);
+
+            unsafe {
+                let hwnd = HWND(handle);
+                SetForegroundWindow(hwnd);
+            }
+
+            // Small delay to ensure Windows processes the focus change
+            // 50ms should be enough for Windows to register the activation
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        } else {
+            println!("DEBUG: Window not found for character: {}", character_name);
+        }
+    }
+
+    println!("DEBUG: Taskbar window reordering completed");
     Ok(())
 }
 
