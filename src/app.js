@@ -202,10 +202,6 @@ function renderWindowList() {
         return;
     }
 
-    // Cloner le conteneur pour retirer tous les anciens event listeners
-    const newListElement = listElement.cloneNode(false);
-    listElement.parentNode.replaceChild(newListElement, listElement);
-
     windowList.forEach((window, index) => {
         const li = document.createElement('li');
         li.className = 'window-item';
@@ -228,6 +224,8 @@ function renderWindowList() {
 
         // Add drag event listeners
         li.addEventListener('dragstart', handleDragStart);
+        li.addEventListener('dragover', handleDragOver);
+        li.addEventListener('drop', handleDrop);
         li.addEventListener('dragend', handleDragEnd);
 
         // Add focus button listener
@@ -243,12 +241,8 @@ function renderWindowList() {
             }
         });
 
-        newListElement.appendChild(li);
+        listElement.appendChild(li);
     });
-
-    // Ajouter les événements dragover et drop sur le nouveau conteneur
-    newListElement.addEventListener('dragover', handleDragOver);
-    newListElement.addEventListener('drop', handleDrop);
 
     log('Liste des fenêtres rendue:', windowList.length, 'éléments');
 }
@@ -264,15 +258,17 @@ function handleDragStart(e) {
 
 function handleDragOver(e) {
     e.preventDefault();
-    e.stopPropagation();
     e.dataTransfer.dropEffect = 'move';
 
-    // e.currentTarget est maintenant le conteneur (ul)
-    const container = e.currentTarget;
+    // Si c'est un item (li), trouver le conteneur parent
+    const container = e.currentTarget.classList.contains('window-item')
+        ? e.currentTarget.parentElement
+        : e.currentTarget;
+
     const afterElement = getDragAfterElement(container, e.clientY);
     const draggable = currentDraggedItem;
 
-    if (draggable) {
+    if (draggable && draggable !== e.currentTarget) {
         if (afterElement == null) {
             container.appendChild(draggable);
         } else {
@@ -285,7 +281,6 @@ function handleDragOver(e) {
 
 function handleDrop(e) {
     e.preventDefault();
-    e.stopPropagation();
 
     log('Élément déposé, mise à jour de l\'ordre');
     updateWindowOrder();
