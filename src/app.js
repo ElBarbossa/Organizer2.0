@@ -309,7 +309,22 @@ function handleGlobalMouseMove(e) {
     if (!isDragging || !currentDraggedItem) return;
 
     const container = currentDraggedItem.closest('.window-list');
-    if (!container) return;
+    const scrollContainer = currentDraggedItem.closest('.window-list-container');
+
+    if (!container || !scrollContainer) return;
+
+    // Auto-scroll when dragging near edges
+    const containerRect = scrollContainer.getBoundingClientRect();
+    const scrollThreshold = 50; // pixels from edge to start scrolling
+    const scrollSpeed = 10; // pixels per frame
+
+    if (e.clientY < containerRect.top + scrollThreshold) {
+        // Scroll up
+        scrollContainer.scrollTop -= scrollSpeed;
+    } else if (e.clientY > containerRect.bottom - scrollThreshold) {
+        // Scroll down
+        scrollContainer.scrollTop += scrollSpeed;
+    }
 
     // Allow normal scrolling but prevent other browser behaviors
     if (e.target.closest('.window-list-container')) {
