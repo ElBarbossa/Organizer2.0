@@ -77,6 +77,7 @@ unsafe extern "system" fn enum_windows_proc(hwnd: HWND, lparam: LPARAM) -> BOOL 
     let title_len = GetWindowTextW(hwnd, &mut title_buffer);
 
     if title_len == 0 {
+        println!("DEBUG: Skipping window {} - no title", hwnd.0);
         return BOOL(1);
     }
 
@@ -84,10 +85,15 @@ unsafe extern "system" fn enum_windows_proc(hwnd: HWND, lparam: LPARAM) -> BOOL 
         .to_string_lossy()
         .to_string();
 
+    println!("DEBUG: Window {} has title: '{}'", hwnd.0, title);
+
     // Check if title contains "Dofus" (additional verification)
     if !title.to_lowercase().contains("dofus") {
+        println!("DEBUG: Skipping window {} - title doesn't contain 'dofus'", hwnd.0);
         return BOOL(1);
     }
+
+    println!("DEBUG: Window {} passed title check", hwnd.0);
 
     // Verify it's actually a Dofus process
     let mut process_id = 0u32;
