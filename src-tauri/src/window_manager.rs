@@ -2,24 +2,21 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::ffi::OsString;
 use std::os::windows::ffi::OsStringExt;
-use windows::core::PCWSTR;
-use windows::Win32::Foundation::{BOOL, HWND, LPARAM, WPARAM};
+use windows::Win32::Foundation::{BOOL, HWND, LPARAM};
 use windows::Win32::System::ProcessStatus::GetProcessImageFileNameW;
 use windows::Win32::System::Threading::{
-    OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
-    AllowSetForegroundWindow, GetCurrentProcessId,
+    OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, GetCurrentProcessId,
 };
-use windows::Win32::System::Memory::{VirtualAllocEx, VirtualFreeEx, MEM_COMMIT, MEM_RELEASE, PAGE_READWRITE};
 use windows::Win32::UI::WindowsAndMessaging::{
     EnumWindows, GetClassNameW, GetWindowTextW, GetWindowThreadProcessId, IsWindowVisible,
-    SetForegroundWindow, ShowWindow, SW_MINIMIZE, SW_RESTORE, SetWindowPos, SWP_NOMOVE, SWP_NOSIZE,
-    HWND_BOTTOM, HWND_TOP, FindWindowW, FindWindowExW, SendMessageW,
+    SetForegroundWindow, SetWindowPos, SWP_NOMOVE, SWP_NOSIZE,
+    HWND_TOP, AllowSetForegroundWindow,
 };
 
-// Toolbar messages
-const TB_BUTTONCOUNT: u32 = 0x0418;
-const TB_GETBUTTON: u32 = 0x0417;
-const TB_MOVEBUTTON: u32 = 0x0452;
+// Note: Toolbar messages kept for future reference if needed
+// const TB_BUTTONCOUNT: u32 = 0x0418;
+// const TB_GETBUTTON: u32 = 0x0417;
+// const TB_MOVEBUTTON: u32 = 0x0452;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DofusWindow {
@@ -155,70 +152,6 @@ pub fn focus_window(handle: isize) -> Result<()> {
         SetForegroundWindow(hwnd);
     }
     Ok(())
-}
-
-/// Try to find the taskbar toolbar control (Windows 10)
-/// Returns None on Windows 11 or if not found
-unsafe fn find_taskbar_toolbar() -> Option<HWND> {
-    // Hierarchy: Shell_TrayWnd -> ReBarWindow32 -> MSTaskSwWClass -> ToolbarWindow32
-
-    // Create wide strings with proper lifetime
-    let shell_tray_class: Vec<u16> = "Shell_TrayWnd\0".encode_utf16().collect();
-    let rebar_class: Vec<u16> = "ReBarWindow32\0".encode_utf16().collect();
-    let task_sw_class: Vec<u16> = "MSTaskSwWClass\0".encode_utf16().collect();
-    let toolbar_class: Vec<u16> = "ToolbarWindow32\0".encode_utf16().collect();
-
-    let shell_tray = FindWindowW(
-        PCWSTR::from_raw(shell_tray_class.as_ptr()),
-        PCWSTR::null()
-    );
-
-    if shell_tray.0 == 0 {
-        println!("DEBUG: Could not find Shell_TrayWnd");
-        return None;
-    }
-    println!("DEBUG: Found Shell_TrayWnd: {:?}", shell_tray);
-
-    let rebar = FindWindowExW(
-        shell_tray,
-        HWND(0),
-        PCWSTR::from_raw(rebar_class.as_ptr()),
-        PCWSTR::null()
-    );
-
-    if rebar.0 == 0 {
-        println!("DEBUG: Could not find ReBarWindow32 (might be Windows 11)");
-        return None;
-    }
-    println!("DEBUG: Found ReBarWindow32: {:?}", rebar);
-
-    let task_sw = FindWindowExW(
-        rebar,
-        HWND(0),
-        PCWSTR::from_raw(task_sw_class.as_ptr()),
-        PCWSTR::null()
-    );
-
-    if task_sw.0 == 0 {
-        println!("DEBUG: Could not find MSTaskSwWClass");
-        return None;
-    }
-    println!("DEBUG: Found MSTaskSwWClass: {:?}", task_sw);
-
-    let toolbar = FindWindowExW(
-        task_sw,
-        HWND(0),
-        PCWSTR::from_raw(toolbar_class.as_ptr()),
-        PCWSTR::null()
-    );
-
-    if toolbar.0 == 0 {
-        println!("DEBUG: Could not find ToolbarWindow32");
-        return None;
-    }
-    println!("DEBUG: Found ToolbarWindow32: {:?}", toolbar);
-
-    Some(toolbar)
 }
 
 /// Update window Z-order based on character names order
