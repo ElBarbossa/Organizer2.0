@@ -443,11 +443,14 @@ const characterNames = newOrder.map(w => w.character_name);
 log('Envoi au backend:', characterNames);
 
 try {
+    log('🔄 APPEL DU BACKEND pour réorganiser la barre des tâches...');
+    log('Ordre envoyé:', characterNames);
     const result = await invoke('update_window_order', { order: characterNames });
-    log('Backend response:', result);
-    updateStatusText('Ordre des fenêtres mis à jour');
+    log('✅ Backend response:', result);
+    log('✅ Réorganisation de la barre des tâches terminée');
+    updateStatusText('Ordre des fenêtres mis à jour - Barre des tâches réorganisée');
 } catch (error) {
-    logError('Échec de la mise à jour de l\'ordre:', error);
+    logError('❌ Échec de la mise à jour de l\'ordre:', error);
     alert(`Erreur lors de la mise à jour de l'ordre: ${error}`);
 }
 }
