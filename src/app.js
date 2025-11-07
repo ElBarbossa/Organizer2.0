@@ -700,50 +700,64 @@ function checkHotkeyConflict(key, excludeId) {
 
 // Appliquer les changements
 async function applyHotkeys() {
-    log('Application des changements de touches...');
+log('Application des changements de touches...');
 
-    try {
-        // Créer une nouvelle configuration basée sur les touches personnalisées
-        const customHotkeys = [];
+const applyBtn = document.getElementById('apply-hotkeys-btn');
+if (applyBtn) {
+    applyBtn.disabled = true;
+    applyBtn.textContent = '🔄 Application...';
+}
 
-        // Ajouter les touches personnalisées
+try {
+    // Créer une nouvelle configuration basée sur les touches personnalisées
+    const customHotkeys = [];
+
+    // Ajouter les touches personnalisées
+    customHotkeys.push({
+        id: 1,
+        modifiers: 0,
+        key_code: hotkeyConfig.next.vkCode,
+        action: { NextWindow: {} }
+    });
+
+    customHotkeys.push({
+        id: 2,
+        modifiers: 0,
+        key_code: hotkeyConfig.prev.vkCode,
+        action: { PreviousWindow: {} }
+    });
+
+    // F1-F8
+    for (let i = 0; i < 8; i++) {
+        const key = ['f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8'][i];
         customHotkeys.push({
-            id: 1,
+            id: 10 + i,
             modifiers: 0,
-            key_code: hotkeyConfig.next.vkCode,
-            action: { NextWindow: {} }
+            key_code: hotkeyConfig[key].vkCode,
+            action: { DirectWindow: i }
         });
-
-        customHotkeys.push({
-            id: 2,
-            modifiers: 0,
-            key_code: hotkeyConfig.prev.vkCode,
-            action: { PreviousWindow: {} }
-        });
-
-        // F1-F8
-        for (let i = 0; i < 8; i++) {
-            const key = ['f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8'][i];
-            customHotkeys.push({
-                id: 10 + i,
-                modifiers: 0,
-                key_code: hotkeyConfig[key].vkCode,
-                action: { DirectWindow: i }
-            });
-        }
-
-        // Envoyer la configuration personnalisée au backend
-        await invoke('setup_custom_hotkeys', { hotkeys: customHotkeys });
-
-        log('✓ Raccourcis mis à jour avec succès !');
-        updateStatusText('Raccourcis mis à jour avec succès ✓');
-
-        alert('Raccourcis mis à jour avec succès !\n\nLes nouveaux raccourcis sont maintenant actifs.');
-    } catch (error) {
-        logError('Échec de la mise à jour des raccourcis:', error);
-        updateStatusText('Erreur lors de la mise à jour');
-        alert('Erreur lors de la mise à jour des raccourcis:\n' + error);
     }
+
+    log('Configuration personnalisée à envoyer:', customHotkeys);
+
+    // Envoyer la configuration personnalisée au backend
+    await invoke('setup_custom_hotkeys', { hotkeys: customHotkeys, app_handle: {} });
+
+    log('✓ Raccourcis mis à jour avec succès !');
+    updateStatusText('Raccourcis mis à jour avec succès ✓');
+
+    alert('Raccourcis mis à jour avec succès !\n\nLes nouveaux raccourcis sont maintenant actifs.');
+} catch (error) {
+    logError('Échec de la mise à jour des raccourcis:', error);
+    updateStatusText('Erreur lors de la mise à jour');
+    alert('Erreur lors de la mise à jour des raccourcis:\n' + error);
+} finally {
+    // Réactiver le bouton
+    if (applyBtn) {
+        applyBtn.disabled = false;
+        applyBtn.textContent = '💾 Appliquer les Changements';
+    }
+}
 }
 
 // Réinitialiser aux valeurs par défaut
