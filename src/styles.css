@@ -269,25 +269,28 @@ body {
 }
 
 /* Hide any browser-native drop indicators */
-.window-list::after {
-    content: '';
-    display: none;
+.window-list::after,
+.window-list::before {
+    content: none !important;
 }
 
 /* Prevent browser drop zone styling */
-.window-list {
-    position: relative;
+.window-list,
+.window-item {
+    -webkit-user-drag: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
 }
 
-.window-list.dragging-over::after {
-    content: '';
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    height: 2px;
-    background: var(--primary-color);
-    display: block;
+/* Prevent any drop zone styling */
+* {
+    -webkit-user-drop: none;
+}
+
+.window-list * {
+    -webkit-user-drop: none;
 }
 
 /* Settings */
