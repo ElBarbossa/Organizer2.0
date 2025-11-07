@@ -60,8 +60,8 @@ unsafe extern "system" fn enum_windows_proc(hwnd: HWND, lparam: LPARAM) -> BOOL 
             .to_string_lossy()
             .to_string();
 
-        // Check for UnityWndClass (current Dofus) or the provided class name
-        if class_name != "UnityWndClass" && class_name != "[CLASS:UnityWndClass]" {
+        // Check for UnityWndClass (current Dofus)
+        if class_name != "UnityWndClass" {
             return BOOL(1);
         }
     } else {
