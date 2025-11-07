@@ -248,6 +248,13 @@ body {
     z-index: 100;
 }
 
+.window-index-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
 .window-index {
     background: var(--primary-color);
     color: white;
@@ -259,6 +266,49 @@ body {
     justify-content: center;
     font-weight: bold;
     font-size: 14px;
+}
+
+.window-reorder-arrows {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.arrow-btn {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    width: 28px;
+    height: 20px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    padding: 0;
+}
+
+.arrow-btn:hover {
+    background: var(--hover-color);
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+}
+
+.arrow-btn:active {
+    transform: scale(0.95);
+}
+
+.arrow-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.arrow-btn:disabled:hover {
+    background: var(--bg-secondary);
+    border-color: var(--border-color);
+    color: var(--text-primary);
 }
 
 .window-info {

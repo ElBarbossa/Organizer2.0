@@ -37,6 +37,7 @@ async function initTauriApis() {
 
 // Application State
 let windowList = [];
+let orderChanged = false; // Track if order has been modified
 let currentDraggedItem = null;
 let isDragging = false;
 let dragStartY = 0;
@@ -145,6 +146,12 @@ function setupEventListeners() {
         await loadWindows();
     });
 
+    // Apply order button
+    document.getElementById('apply-order-btn').addEventListener('click', async () => {
+        log('Bouton "Appliquer l\'Ordre" cliqué');
+        await applyWindowOrder();
+    });
+
     // Save profile button
     document.getElementById('save-profile-btn').addEventListener('click', async () => {
         const nameInput = document.getElementById('profile-name-input');
@@ -216,7 +223,15 @@ function renderWindowList() {
         li.dataset.handle = window.handle;
 
         li.innerHTML = `
-            <div class="window-index">${index + 1}</div>
+            <div class="window-index-container">
+                <div class="window-reorder-arrows">
+                    <button class="arrow-btn move-up-btn" data-index="${index}" ${index === 0 ? 'disabled' : ''}>▲</button>
+                </div>
+                <div class="window-index">${index + 1}</div>
+                <div class="window-reorder-arrows">
+                    <button class="arrow-btn move-down-btn" data-index="${index}" ${index === windowList.length - 1 ? 'disabled' : ''}>▼</button>
+                </div>
+            </div>
             <div class="window-info">
                 <div class="window-name">${escapeHtml(window.character_name)}</div>
                 <div class="window-title">${escapeHtml(window.title)}</div>
@@ -245,6 +260,30 @@ function renderWindowList() {
             }
         });
 
+        // Add arrow button listeners
+        const moveUpBtn = li.querySelector('.move-up-btn');
+        const moveDownBtn = li.querySelector('.move-down-btn');
+
+        if (moveUpBtn) {
+            moveUpBtn.addEventListener('click', (e) => {
+                e.stopPropagation(); // Prevent drag from starting
+                const idx = parseInt(e.target.dataset.index);
+                if (idx > 0) {
+                    moveWindowUp(idx);
+                }
+            });
+        }
+
+        if (moveDownBtn) {
+            moveDownBtn.addEventListener('click', (e) => {
+                e.stopPropagation(); // Prevent drag from starting
+                const idx = parseInt(e.target.dataset.index);
+                if (idx < windowList.length - 1) {
+                    moveWindowDown(idx);
+                }
+            });
+        }
+
         newListElement.appendChild(li);
     });
 
@@ -255,10 +294,57 @@ function renderWindowList() {
     log('Liste des fenêtres rendue:', windowList.length, 'éléments');
 }
 
+// Show/Hide Apply Order button
+function toggleApplyOrderButton(show) {
+    const applyBtn = document.getElementById('apply-order-btn');
+    if (applyBtn) {
+        applyBtn.style.display = show ? 'inline-flex' : 'none';
+    }
+}
+
+// Mark order as changed
+function markOrderChanged() {
+    orderChanged = true;
+    toggleApplyOrderButton(true);
+    updateStatusText('Ordre modifié - Cliquez sur "Appliquer l\'Ordre" pour mettre à jour la barre des tâches');
+}
+
+// Move window up in the list
+function moveWindowUp(index) {
+    if (index <= 0 || index >= windowList.length) return;
+
+    // Swap with previous element
+    const temp = windowList[index];
+    windowList[index] = windowList[index - 1];
+    windowList[index - 1] = temp;
+
+    // Mark order as changed
+    markOrderChanged();
+
+    // Re-render the list
+    renderWindowList();
+}
+
+// Move window down in the list
+function moveWindowDown(index) {
+    if (index < 0 || index >= windowList.length - 1) return;
+
+    // Swap with next element
+    const temp = windowList[index];
+    windowList[index] = windowList[index + 1];
+    windowList[index + 1] = temp;
+
+    // Mark order as changed
+    markOrderChanged();
+
+    // Re-render the list
+    renderWindowList();
+}
+
 // Custom Drag and Drop handlers (compatible with Tauri/WebView2)
 function handleMouseDown(e) {
-    // Only start drag if clicking on the main area (not buttons)
-    if (e.target.closest('.icon-btn')) {
+    // Only start drag if clicking on the main area (not buttons or arrows)
+    if (e.target.closest('.icon-btn') || e.target.closest('.arrow-btn')) {
         return; // Ignore clicks on buttons
     }
 
@@ -411,9 +497,10 @@ function handleMouseUp(e) {
     document.body.style.userSelect = '';
     document.body.style.cursor = '';
 
-    // Update window order
-    log('Élément déposé, mise à jour de l\'ordre');
-    updateWindowOrder();
+    // Mark order as changed instead of applying immediately
+    log('Élément déposé, ordre modifié');
+    updateWindowListFromDOM();
+    markOrderChanged();
 
     // Clean up
     isDragging = false;
@@ -474,50 +561,50 @@ function getDragAfterElement(container, y) {
     return { element: closestElement, position };
 }
 
-// Update window order after drag and drop
-async function updateWindowOrder() {
-log('=== UPDATE WINDOW ORDER CALLED ===');
-const items = document.querySelectorAll('.window-item');
-const newOrder = [];
+// Update windowList from current DOM order (after drag-and-drop)
+function updateWindowListFromDOM() {
+    const items = document.querySelectorAll('.window-item');
+    const newOrder = [];
 
-log('Nombre d\'éléments trouvés:', items.length);
+    items.forEach((item) => {
+        const handle = parseInt(item.dataset.handle);
+        const window = windowList.find(w => w.handle === handle);
+        if (window) {
+            newOrder.push(window);
+        }
+    });
 
-items.forEach((item, index) => {
-    const handle = parseInt(item.dataset.handle);
-    log(`Élément ${index}: handle=${handle}, dataset.handle=${item.dataset.handle}`);
-    const window = windowList.find(w => w.handle === handle);
-    if (window) {
-        newOrder.push(window);
-        log(`  Ajouté: ${window.character_name}`);
-    } else {
-        logError(`  Fenêtre non trouvée pour handle ${handle}`);
-    }
-
-    // Update index display
-    const indexElement = item.querySelector('.window-index');
-    if (indexElement) {
-        indexElement.textContent = index + 1;
-    }
-});
-
-windowList = newOrder;
-log('Nouvel ordre des fenêtres:', windowList.map(w => w.character_name));
-
-// Send order to backend
-const characterNames = newOrder.map(w => w.character_name);
-log('Envoi au backend:', characterNames);
-
-try {
-    log('🔄 APPEL DU BACKEND pour réorganiser la barre des tâches...');
-    log('Ordre envoyé:', characterNames);
-    const result = await invoke('update_window_order', { order: characterNames });
-    log('✅ Backend response:', result);
-    log('✅ Réorganisation de la barre des tâches terminée');
-    updateStatusText('Ordre des fenêtres mis à jour - Barre des tâches réorganisée');
-} catch (error) {
-    logError('❌ Échec de la mise à jour de l\'ordre:', error);
-    alert(`Erreur lors de la mise à jour de l'ordre: ${error}`);
+    windowList = newOrder;
+    log('Ordre mis à jour depuis le DOM:', windowList.map(w => w.character_name));
 }
+
+// Apply window order and send to backend (called by Apply Order button)
+async function applyWindowOrder() {
+    log('=== APPLY WINDOW ORDER CALLED ===');
+
+    if (!orderChanged) {
+        log('Aucun changement d\'ordre détecté, annulation');
+        return;
+    }
+
+    const characterNames = windowList.map(w => w.character_name);
+    log('Ordre à appliquer:', characterNames);
+
+    try {
+        log('🔄 APPEL DU BACKEND pour réorganiser la barre des tâches...');
+        const result = await invoke('update_window_order', { order: characterNames });
+        log('✅ Backend response:', result);
+        log('✅ Réorganisation de la barre des tâches terminée');
+
+        // Reset order changed flag and hide button
+        orderChanged = false;
+        toggleApplyOrderButton(false);
+
+        updateStatusText('Ordre appliqué - Barre des tâches réorganisée');
+    } catch (error) {
+        logError('❌ Échec de la mise à jour de l\'ordre:', error);
+        alert(`Erreur lors de la mise à jour de l'ordre: ${error}`);
+    }
 }
 
 // Setup default hotkeys
