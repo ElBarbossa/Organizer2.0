@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RustFocus - Gestionnaire de Fenêtres Dofus</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <h1>🎮 RustFocus</h1>
+            <p class="subtitle">Gestionnaire ultra-performant de fenêtres Dofus</p>
+        </header>
+
+        <!-- Main Content -->
+        <main class="app-content">
+            <!-- Tab Navigation -->
+            <div class="tab-nav">
+                <button class="tab-btn active" data-tab="windows">Fenêtres</button>
+                <button class="tab-btn" data-tab="settings">Paramètres</button>
+                <button class="tab-btn" data-tab="profiles">Profils</button>
+            </div>
+
+            <!-- Windows Tab -->
+            <div class="tab-content active" id="windows-tab">
+                <div class="action-bar">
+                    <button id="refresh-btn" class="btn btn-primary">
+                        <span>🔄</span> Actualiser les Fenêtres
+                    </button>
+                    <span class="status-text" id="status-text">Prêt</span>
+                </div>
+
+                <div class="window-list-container">
+                    <div class="hint-text">
+                        <p>💡 Glissez-déposez pour réorganiser les fenêtres</p>
+                        <p>⌨️ Utilisez Page Haut/Bas pour cycler (bientôt disponible)</p>
+                    </div>
+                    <ul id="window-list" class="window-list">
+                        <!-- Windows will be populated here -->
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Settings Tab -->
+            <div class="tab-content" id="settings-tab">
+                <div class="settings-section">
+                    <h2>⌨️ Configuration des Raccourcis</h2>
+
+                    <div class="settings-group" style="background: rgba(82, 196, 26, 0.1); border: 2px solid #52c41a;">
+                        <h3>✅ Raccourcis Globaux ACTIFS</h3>
+                        <p>Les raccourcis clavier globaux sont maintenant fonctionnels !</p>
+                        <p>Cliquez sur <strong>"Configurer"</strong> pour personnaliser une touche.</p>
+                    </div>
+
+                    <div class="settings-group">
+                        <h3>Navigation Cyclique</h3>
+                        <div class="hotkey-config-row">
+                            <label>Fenêtre Suivante :</label>
+                            <kbd id="hotkey-next">Page Down</kbd>
+                            <button class="btn btn-secondary btn-sm" onclick="configureHotkey('next')">🔧 Configurer</button>
+                        </div>
+                        <div class="hotkey-config-row">
+                            <label>Fenêtre Précédente :</label>
+                            <kbd id="hotkey-prev">Page Up</kbd>
+                            <button class="btn btn-secondary btn-sm" onclick="configureHotkey('prev')">🔧 Configurer</button>
+                        </div>
+                    </div>
+
+                    <div class="settings-group">
+                        <h3>Accès Direct</h3>
+                        <div class="hotkey-config-row">
+                            <label>Fenêtre #1 :</label>
+                            <kbd id="hotkey-f1">F1</kbd>
+                            <button class="btn btn-secondary btn-sm" onclick="configureHotkey('f1')">🔧 Configurer</button>
+                        </div>
+                        <div class="hotkey-config-row">
+                            <label>Fenêtre #2 :</label>
+                            <kbd id="hotkey-f2">F2</kbd>
+                            <button class="btn btn-secondary btn-sm" onclick="configureHotkey('f2')">🔧 Configurer</button>
+                        </div>
+                        <div class="hotkey-config-row">
+                            <label>Fenêtre #3 :</label>
+                            <kbd id="hotkey-f3">F3</kbd>
+                            <button class="btn btn-secondary btn-sm" onclick="configureHotkey('f3')">🔧 Configurer</button>
+                        </div>
+                        <div class="hotkey-config-row">
+                            <label>Fenêtre #4 :</label>
+                            <kbd id="hotkey-f4">F4</kbd>
+                            <button class="btn btn-secondary btn-sm" onclick="configureHotkey('f4')">🔧 Configurer</button>
+                        </div>
+                        <div class="hotkey-config-row">
+                            <label>Fenêtre #5 :</label>
+                            <kbd id="hotkey-f5">F5</kbd>
+                            <button class="btn btn-secondary btn-sm" onclick="configureHotkey('f5')">🔧 Configurer</button>
+                        </div>
+                        <div class="hotkey-config-row">
+                            <label>Fenêtre #6 :</label>
+                            <kbd id="hotkey-f6">F6</kbd>
+                            <button class="btn btn-secondary btn-sm" onclick="configureHotkey('f6')">🔧 Configurer</button>
+                        </div>
+                        <div class="hotkey-config-row">
+                            <label>Fenêtre #7 :</label>
+                            <kbd id="hotkey-f7">F7</kbd>
+                            <button class="btn btn-secondary btn-sm" onclick="configureHotkey('f7')">🔧 Configurer</button>
+                        </div>
+                        <div class="hotkey-config-row">
+                            <label>Fenêtre #8 :</label>
+                            <kbd id="hotkey-f8">F8</kbd>
+                            <button class="btn btn-secondary btn-sm" onclick="configureHotkey('f8')">🔧 Configurer</button>
+                        </div>
+                    </div>
+
+                    <div class="settings-group">
+                        <h3>Actions</h3>
+                        <div style="display: flex; gap: 10px;">
+                            <button class="btn btn-primary" onclick="applyHotkeys()">💾 Appliquer les Changements</button>
+                            <button class="btn btn-secondary" onclick="resetHotkeys()">🔄 Réinitialiser par Défaut</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Profiles Tab -->
+            <div class="tab-content" id="profiles-tab">
+                <div class="profiles-section">
+                    <h2>💾 Gestion des Profils</h2>
+
+                    <div class="profile-actions">
+                        <div class="input-group">
+                            <input
+                                type="text"
+                                id="profile-name-input"
+                                placeholder="Entrez un nom de profil..."
+                                class="input-field"
+                            >
+                            <button id="save-profile-btn" class="btn btn-primary">
+                                Sauvegarder le Profil
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="profile-list-container">
+                        <h3>Profils Sauvegardés</h3>
+                        <ul id="profile-list" class="profile-list">
+                            <!-- Profiles will be populated here -->
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="app-footer">
+            <p>⚡ Utilisation minimale des ressources • 🚫 Pas d'automatisation • ✅ Conforme CGU</p>
+        </footer>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

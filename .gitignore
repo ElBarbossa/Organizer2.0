@@ -1,0 +1,38 @@
+# Rust
+target/
+Cargo.lock
+**/*.rs.bk
+*.pdb
+
+# Tauri
+src-tauri/target/
+src-tauri/Cargo.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Dependencies
+node_modules/
+dist/
+
+# Profiles (user data)
+profiles/
+
+# Logs
+*.log
+
+# Build artifacts
+*.exe
+!src-tauri/target/release/rustfocus.exe
+*.msi
+*.dmg
+*.deb
+*.AppImage

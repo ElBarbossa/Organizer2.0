@@ -1,0 +1,3 @@
+# Placeholder - Real icon files should be generated using icon generation tools
+# For production, use: https://tauri.app/v1/guides/features/icons
+# Or generate with: npm install -g @tauri-apps/cli && tauri icon path/to/icon.png
