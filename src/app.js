@@ -311,7 +311,11 @@ function handleGlobalMouseMove(e) {
     const container = currentDraggedItem.closest('.window-list');
     if (!container) return;
 
-    // Prevent default to stop any unwanted scrolling or browser behaviors
+    // Allow normal scrolling but prevent other browser behaviors
+    if (e.target.closest('.window-list-container')) {
+        // Allow scrolling in the container
+        return;
+    }
     e.preventDefault();
 
     // Déterminer où insérer l'élément
