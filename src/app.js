@@ -233,6 +233,7 @@ function renderWindowList() {
 
         // Add focus button listener
         li.querySelector('.focus-btn').addEventListener('click', async (e) => {
+            e.stopPropagation(); // PREVENIR LA PROPAGATION AU DRAG
             const handle = parseInt(e.target.dataset.handle);
             log('Focus de la fenêtre:', handle, window.character_name);
             try {
