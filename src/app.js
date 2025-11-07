@@ -38,6 +38,9 @@ async function initTauriApis() {
 // Application State
 let windowList = [];
 let currentDraggedItem = null;
+let isDragging = false;
+let dragStartY = 0;
+let dragStartX = 0;
 
 // Mode Debug
 const DEBUG = true;
@@ -209,7 +212,6 @@ function renderWindowList() {
     windowList.forEach((window, index) => {
         const li = document.createElement('li');
         li.className = 'window-item';
-        li.draggable = true;
         li.dataset.index = index;
         li.dataset.handle = window.handle;
 
@@ -220,20 +222,18 @@ function renderWindowList() {
                 <div class="window-title">${escapeHtml(window.title)}</div>
             </div>
             <div class="window-actions">
-                <button class="icon-btn focus-btn" data-handle="${window.handle}" onclick="this.blur()">
+                <button class="icon-btn focus-btn" data-handle="${window.handle}">
                     👁️ Focus
                 </button>
             </div>
         `;
 
-        // Add drag event listeners
-        // dragstart et dragend sur les items
-        li.addEventListener('dragstart', handleDragStart);
-        li.addEventListener('dragend', handleDragEnd);
+        // Add custom drag event listeners (compatible with Tauri/WebView2)
+        li.addEventListener('mousedown', handleMouseDown);
+        li.addEventListener('mousemove', handleMouseMove);
 
         // Add focus button listener
         li.querySelector('.focus-btn').addEventListener('click', async (e) => {
-            e.stopPropagation(); // PREVENIR LA PROPAGATION AU DRAG
             const handle = parseInt(e.target.dataset.handle);
             log('Focus de la fenêtre:', handle, window.character_name);
             try {
@@ -255,68 +255,82 @@ function renderWindowList() {
     log('Liste des fenêtres rendue:', windowList.length, 'éléments');
 }
 
-// Drag and Drop handlers
-function handleDragStart(e) {
-    console.log('[DRAG] handleDragStart called', e);
-    currentDraggedItem = e.currentTarget;
-    e.currentTarget.classList.add('dragging');
-    e.dataTransfer.effectAllowed = 'move';
-    // Important: setData est requis pour certains navigateurs
-    e.dataTransfer.setData('text/plain', e.currentTarget.dataset.handle);
-    log('Début du glisser-déposer:', e.currentTarget.dataset.handle);
-
-    // Afficher l'état du drag pour debug
-    console.log('[DRAG] DataTransfer types:', e.dataTransfer.types);
-    console.log('[DRAG] DataTransfer effectAllowed:', e.dataTransfer.effectAllowed);
-}
-
-function handleDragOver(e) {
-    console.log('[DRAG] handleDragOver called', e);
-    console.log('[DRAG] Target element:', e.target);
-    console.log('[DRAG] Current target:', e.currentTarget);
-    console.log('[DRAG] DataTransfer types:', e.dataTransfer.types);
-
-    // CRUCIAL: preventDefault pour autoriser le drop
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-
-    const draggable = currentDraggedItem;
-    if (!draggable) {
-        console.log('[DRAG] No draggable item');
-        return false;
+// Custom Drag and Drop handlers (compatible with Tauri/WebView2)
+function handleMouseDown(e) {
+    // Only start drag if clicking on the main area (not buttons)
+    if (e.target.closest('.icon-btn')) {
+        return; // Ignore clicks on buttons
     }
 
-    // e.currentTarget est maintenant le conteneur (ul)
-    const container = e.currentTarget;
+    isDragging = false;
+    currentDraggedItem = e.currentTarget;
+    dragStartX = e.clientX;
+    dragStartY = e.clientY;
+
+    console.log('[DRAG] handleMouseDown on:', currentDraggedItem.dataset.handle);
+}
+
+function handleMouseMove(e) {
+    if (!currentDraggedItem || isDragging) return;
+
+    // Check if moved enough to start dragging
+    const deltaX = Math.abs(e.clientX - dragStartX);
+    const deltaY = Math.abs(e.clientY - dragStartY);
+
+    if (deltaX > 5 || deltaY > 5) {
+        // Start dragging
+        isDragging = true;
+        currentDraggedItem.classList.add('dragging');
+        console.log('[DRAG] Started dragging:', currentDraggedItem.dataset.handle);
+
+        // Add global mouse event listeners
+        document.addEventListener('mousemove', handleGlobalMouseMove);
+        document.addEventListener('mouseup', handleMouseUp);
+    }
+}
+
+function handleGlobalMouseMove(e) {
+    if (!isDragging || !currentDraggedItem) return;
+
+    const container = currentDraggedItem.closest('.window-list');
+    if (!container) return;
 
     // Déterminer où insérer l'élément
     const afterElement = getDragAfterElement(container, e.clientY);
 
     if (afterElement == null) {
-        container.appendChild(draggable);
+        container.appendChild(currentDraggedItem);
     } else {
-        container.insertBefore(draggable, afterElement);
+        container.insertBefore(currentDraggedItem, afterElement);
     }
-
-    return false;
 }
 
-function handleDrop(e) {
-    console.log('[DRAG] handleDrop called', e);
-    e.preventDefault();
-    e.stopPropagation();
+function handleMouseUp(e) {
+    if (!isDragging) {
+        currentDraggedItem = null;
+        return;
+    }
 
+    console.log('[DRAG] handleMouseUp - finishing drag');
+
+    // Remove dragging state
+    if (currentDraggedItem) {
+        currentDraggedItem.classList.remove('dragging');
+    }
+
+    // Update window order
     log('Élément déposé, mise à jour de l\'ordre');
     updateWindowOrder();
 
-    return false;
-}
-
-function handleDragEnd(e) {
-    console.log('[DRAG] handleDragEnd called', e);
-    e.currentTarget.classList.remove('dragging');
-    log('Fin du glisser-déposer');
+    // Clean up
+    isDragging = false;
     currentDraggedItem = null;
+
+    // Remove global listeners
+    document.removeEventListener('mousemove', handleGlobalMouseMove);
+    document.removeEventListener('mouseup', handleMouseUp);
+
+    log('Fin du glisser-déposer');
 }
 
 function getDragAfterElement(container, y) {

@@ -203,6 +203,7 @@ body {
     display: flex;
     align-items: center;
     gap: 12px;
+    user-select: none; /* Prevent text selection during drag */
 }
 
 .window-item:hover {
