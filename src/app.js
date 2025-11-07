@@ -373,6 +373,15 @@ function handleMouseUp(e) {
 function getDragAfterElement(container, y) {
     const draggableElements = [...container.querySelectorAll('.window-item:not(.dragging)')];
 
+    // Add a virtual element at the bottom to handle drops at the end
+    const containerRect = container.getBoundingClientRect();
+    const bottomThreshold = containerRect.bottom - 20; // 20px threshold at bottom
+
+    // If mouse is below the last element but still within container bounds
+    if (y > bottomThreshold && y <= containerRect.bottom) {
+        return null; // Drop at end
+    }
+
     return draggableElements.reduce((closest, child) => {
         const box = child.getBoundingClientRect();
         const offset = y - box.top - box.height / 2;
