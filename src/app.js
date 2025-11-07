@@ -202,6 +202,10 @@ function renderWindowList() {
         return;
     }
 
+    // Cloner le conteneur pour retirer tous les anciens event listeners
+    const newListElement = listElement.cloneNode(false);
+    listElement.parentNode.replaceChild(newListElement, listElement);
+
     windowList.forEach((window, index) => {
         const li = document.createElement('li');
         li.className = 'window-item';
@@ -239,12 +243,12 @@ function renderWindowList() {
             }
         });
 
-        listElement.appendChild(li);
+        newListElement.appendChild(li);
     });
 
-    // Ajouter les événements dragover et drop sur le conteneur
-    listElement.addEventListener('dragover', handleDragOver);
-    listElement.addEventListener('drop', handleDrop);
+    // Ajouter les événements dragover et drop sur le nouveau conteneur
+    newListElement.addEventListener('dragover', handleDragOver);
+    newListElement.addEventListener('drop', handleDrop);
 
     log('Liste des fenêtres rendue:', windowList.length, 'éléments');
 }
@@ -260,6 +264,7 @@ function handleDragStart(e) {
 
 function handleDragOver(e) {
     e.preventDefault();
+    e.stopPropagation();
     e.dataTransfer.dropEffect = 'move';
 
     // e.currentTarget est maintenant le conteneur (ul)
@@ -274,6 +279,8 @@ function handleDragOver(e) {
             container.insertBefore(draggable, afterElement);
         }
     }
+
+    return false;
 }
 
 function handleDrop(e) {
@@ -282,6 +289,8 @@ function handleDrop(e) {
 
     log('Élément déposé, mise à jour de l\'ordre');
     updateWindowOrder();
+
+    return false;
 }
 
 function handleDragEnd(e) {
@@ -364,14 +373,14 @@ async function setupHotkeys() {
                 id: 1,
                 modifiers: 0,
                 key_code: hotkeyConfig.next.vkCode,
-                action: { NextWindow: {} }
+                action: "NextWindow"
             });
 
             customHotkeys.push({
                 id: 2,
                 modifiers: 0,
                 key_code: hotkeyConfig.prev.vkCode,
-                action: { PreviousWindow: {} }
+                action: "PreviousWindow"
             });
 
             for (let i = 0; i < 8; i++) {
@@ -821,14 +830,14 @@ async function applyHotkeys() {
             id: 1,
             modifiers: 0,
             key_code: hotkeyConfig.next.vkCode,
-            action: { NextWindow: {} }
+            action: "NextWindow"
         });
 
         customHotkeys.push({
             id: 2,
             modifiers: 0,
             key_code: hotkeyConfig.prev.vkCode,
-            action: { PreviousWindow: {} }
+            action: "PreviousWindow"
         });
 
         // F1-F8
