@@ -315,8 +315,8 @@ function handleGlobalMouseMove(e) {
 
     // Auto-scroll when dragging near edges
     const containerRect = scrollContainer.getBoundingClientRect();
-    const scrollThreshold = 50; // pixels from edge to start scrolling (increased for later activation)
-    const scrollSpeed = 6; // pixels per frame (very slow)
+    const scrollThreshold = 50; // pixels from edge to start scrolling
+    const scrollSpeed = 6; // pixels per frame
 
     if (e.clientY < containerRect.top + scrollThreshold) {
         // Scroll up
@@ -333,24 +333,56 @@ function handleGlobalMouseMove(e) {
     }
     e.preventDefault();
 
-    // Déterminer où insérer l'élément
-    const afterElement = getDragAfterElement(container, e.clientY);
+    // Clear previous drop indicators
+    const allItems = container.querySelectorAll('.window-item');
+    allItems.forEach(item => {
+        item.classList.remove('drop-before', 'drop-after');
+    });
 
-    // Only reorder if the position actually changes
-    const currentIndex = Array.from(container.children).indexOf(currentDraggedItem);
-    let newIndex;
+    // Déterminer où insérer l'élément avec un indicateur visuel
+    const dropInfo = getDragAfterElement(container, e.clientY);
 
-    if (afterElement == null) {
-        newIndex = container.children.length - 1;
-    } else {
-        newIndex = Array.from(container.children).indexOf(afterElement) - 1;
-    }
+    if (dropInfo) {
+        const { element: afterElement, position } = dropInfo;
 
-    if (newIndex !== currentIndex) {
-        if (afterElement == null) {
-            container.appendChild(currentDraggedItem);
+        // Show visual indicator
+        if (afterElement && position === 'before') {
+            afterElement.classList.add('drop-before');
+        } else if (afterElement && position === 'after') {
+            afterElement.classList.add('drop-after');
+        }
+
+        // Only reorder if the position actually changes
+        const currentIndex = Array.from(container.children).indexOf(currentDraggedItem);
+        let newIndex;
+
+        if (!afterElement) {
+            // Drop at the end
+            newIndex = container.children.length - 1;
+        } else if (position === 'before') {
+            newIndex = Array.from(container.children).indexOf(afterElement);
         } else {
-            container.insertBefore(currentDraggedItem, afterElement);
+            newIndex = Array.from(container.children).indexOf(afterElement) + 1;
+        }
+
+        // Adjust index if dragged item is before the target
+        if (currentIndex < newIndex) {
+            newIndex--;
+        }
+
+        if (newIndex !== currentIndex && newIndex >= 0) {
+            if (!afterElement || position === 'after') {
+                // Insert at the end or after the element
+                const nextElement = afterElement ? afterElement.nextSibling : null;
+                if (nextElement) {
+                    container.insertBefore(currentDraggedItem, nextElement);
+                } else {
+                    container.appendChild(currentDraggedItem);
+                }
+            } else {
+                // Insert before the element
+                container.insertBefore(currentDraggedItem, afterElement);
+            }
         }
     }
 }
@@ -364,6 +396,15 @@ function handleMouseUp(e) {
     // Remove dragging state
     if (currentDraggedItem) {
         currentDraggedItem.classList.remove('dragging');
+    }
+
+    // Clear all drop indicators
+    const container = currentDraggedItem?.closest('.window-list');
+    if (container) {
+        const allItems = container.querySelectorAll('.window-item');
+        allItems.forEach(item => {
+            item.classList.remove('drop-before', 'drop-after');
+        });
     }
 
     // Reset body styles
@@ -388,25 +429,49 @@ function handleMouseUp(e) {
 function getDragAfterElement(container, y) {
     const draggableElements = [...container.querySelectorAll('.window-item:not(.dragging)')];
 
-    // Add a virtual element at the bottom to handle drops at the end
-    const containerRect = container.getBoundingClientRect();
-    const bottomThreshold = containerRect.bottom - 20; // 20px threshold at bottom
-
-    // If mouse is below the last element but still within container bounds
-    if (y > bottomThreshold && y <= containerRect.bottom) {
-        return null; // Drop at end
+    if (draggableElements.length === 0) {
+        return { element: null, position: 'after' };
     }
 
-    return draggableElements.reduce((closest, child) => {
-        const box = child.getBoundingClientRect();
-        const offset = y - box.top - box.height / 2;
+    // Find the element the mouse is over or closest to
+    let closestElement = null;
+    let closestDistance = Number.POSITIVE_INFINITY;
+    let position = 'after';
 
-        if (offset < 0 && offset > closest.offset) {
-            return { offset: offset, element: child };
-        } else {
-            return closest;
+    for (const element of draggableElements) {
+        const box = element.getBoundingClientRect();
+        const elementCenter = box.top + box.height / 2;
+        const distanceFromTop = Math.abs(y - box.top);
+        const distanceFromBottom = Math.abs(y - box.bottom);
+        const distanceFromCenter = Math.abs(y - elementCenter);
+
+        // Determine if mouse is in the top half or bottom half of the element
+        if (y >= box.top && y <= box.bottom) {
+            // Mouse is over this element
+            closestElement = element;
+            position = (y < elementCenter) ? 'before' : 'after';
+            break;
+        } else if (distanceFromTop < closestDistance || distanceFromBottom < closestDistance) {
+            // Mouse is between elements, find the closest one
+            if (distanceFromTop < distanceFromBottom && distanceFromTop < closestDistance) {
+                closestDistance = distanceFromTop;
+                closestElement = element;
+                position = 'before';
+            } else if (distanceFromBottom < closestDistance) {
+                closestDistance = distanceFromBottom;
+                closestElement = element;
+                position = 'after';
+            }
         }
-    }, { offset: Number.NEGATIVE_INFINITY }).element;
+    }
+
+    // If no element found, drop at the end
+    if (!closestElement) {
+        const lastElement = draggableElements[draggableElements.length - 1];
+        return { element: lastElement, position: 'after' };
+    }
+
+    return { element: closestElement, position };
 }
 
 // Update window order after drag and drop

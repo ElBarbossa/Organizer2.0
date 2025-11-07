@@ -215,7 +215,37 @@ body {
 }
 
 .window-item.dragging {
-    opacity: 0.5;
+    opacity: 0.4;
+    cursor: move;
+    transform: scale(0.95);
+    transition: transform 0.1s ease;
+}
+
+/* Indicateur visuel de position de drop */
+.window-item.drop-before::before {
+    content: '';
+    position: absolute;
+    top: -2px;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: var(--primary-color);
+    border-radius: 2px;
+    box-shadow: 0 0 8px rgba(0, 122, 204, 0.6);
+    z-index: 100;
+}
+
+.window-item.drop-after::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: var(--primary-color);
+    border-radius: 2px;
+    box-shadow: 0 0 8px rgba(0, 122, 204, 0.6);
+    z-index: 100;
 }
 
 .window-index {
