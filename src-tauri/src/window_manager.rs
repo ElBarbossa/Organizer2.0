@@ -60,6 +60,9 @@ unsafe extern "system" fn enum_windows_proc(hwnd: HWND, lparam: LPARAM) -> BOOL 
             .to_string_lossy()
             .to_string();
 
+        // Log all windows for debugging
+        println!("DEBUG Window: Class='{}', Handle={}", class_name, hwnd.0);
+
         // Check for UnityWndClass (current Dofus)
         if class_name != "UnityWndClass" {
             return BOOL(1);

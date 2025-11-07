@@ -32,6 +32,7 @@ profiles/
 # Build artifacts
 *.exe
 !src-tauri/target/release/rustfocus.exe
+!src-tauri/target/debug/rustfocus.exe
 *.msi
 *.dmg
 *.deb
