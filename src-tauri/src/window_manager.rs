@@ -89,10 +89,13 @@ unsafe extern "system" fn enum_windows_proc(hwnd: HWND, lparam: LPARAM) -> BOOL 
 
     // Check if title contains "Dofus" (additional verification)
     // For some Dofus versions, the title format might be different
-    if !title.to_lowercase().contains("dofus") && !title.contains(" - ") {
-        println!("DEBUG: Skipping window {} - title doesn't contain 'dofus' and no dash separator", hwnd.0);
+    // Temporarily accept any window with " - " in title (Dofus format)
+    if !title.contains(" - ") {
+        println!("DEBUG: Skipping window {} - title '{}' doesn't contain dash separator", hwnd.0, title);
         return BOOL(1);
     }
+
+    println!("DEBUG: Window {} passed title check with title: '{}'", hwnd.0, title);
 
     println!("DEBUG: Window {} passed title check", hwnd.0);
 
