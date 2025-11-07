@@ -256,6 +256,7 @@ function renderWindowList() {
 
 // Drag and Drop handlers
 function handleDragStart(e) {
+    console.log('[DRAG] handleDragStart called', e);
     currentDraggedItem = e.currentTarget;
     e.currentTarget.classList.add('dragging');
     e.dataTransfer.effectAllowed = 'move';
@@ -265,6 +266,7 @@ function handleDragStart(e) {
 }
 
 function handleDragOver(e) {
+    console.log('[DRAG] handleDragOver called', e);
     // CRUCIAL: preventDefault pour autoriser le drop
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
@@ -288,6 +290,7 @@ function handleDragOver(e) {
 }
 
 function handleDrop(e) {
+    console.log('[DRAG] handleDrop called', e);
     e.preventDefault();
     e.stopPropagation();
 
@@ -298,6 +301,7 @@ function handleDrop(e) {
 }
 
 function handleDragEnd(e) {
+    console.log('[DRAG] handleDragEnd called', e);
     e.currentTarget.classList.remove('dragging');
     log('Fin du glisser-déposer');
     currentDraggedItem = null;
