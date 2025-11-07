@@ -315,8 +315,8 @@ function handleGlobalMouseMove(e) {
 
     // Auto-scroll when dragging near edges
     const containerRect = scrollContainer.getBoundingClientRect();
-    const scrollThreshold = 30; // pixels from edge to start scrolling
-    const scrollSpeed = 2; // pixels per frame (reduced for smoother experience)
+    const scrollThreshold = 50; // pixels from edge to start scrolling (increased for later activation)
+    const scrollSpeed = 1; // pixels per frame (very slow)
 
     if (e.clientY < containerRect.top + scrollThreshold) {
         // Scroll up
