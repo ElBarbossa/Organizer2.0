@@ -222,10 +222,8 @@ function renderWindowList() {
             </div>
         `;
 
-        // Add drag and drop event listeners
+        // Add drag event listeners
         li.addEventListener('dragstart', handleDragStart);
-        li.addEventListener('dragover', handleDragOver);
-        li.addEventListener('drop', handleDrop);
         li.addEventListener('dragend', handleDragEnd);
 
         // Add focus button listener
@@ -244,6 +242,10 @@ function renderWindowList() {
         listElement.appendChild(li);
     });
 
+    // Ajouter les événements dragover et drop sur le conteneur
+    listElement.addEventListener('dragover', handleDragOver);
+    listElement.addEventListener('drop', handleDrop);
+
     log('Liste des fenêtres rendue:', windowList.length, 'éléments');
 }
 
@@ -253,41 +255,39 @@ function handleDragStart(e) {
     e.currentTarget.classList.add('dragging');
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/html', e.currentTarget.innerHTML);
-    log('Début du glisser-déposer');
+    log('Début du glisser-déposer:', e.currentTarget.dataset.handle);
 }
 
 function handleDragOver(e) {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
 
-    const container = e.currentTarget.parentElement;
+    // e.currentTarget est maintenant le conteneur (ul)
+    const container = e.currentTarget;
     const afterElement = getDragAfterElement(container, e.clientY);
     const draggable = currentDraggedItem;
 
-    if (draggable && container) {
+    if (draggable) {
         if (afterElement == null) {
             container.appendChild(draggable);
         } else {
             container.insertBefore(draggable, afterElement);
         }
     }
-
-    return false;
 }
 
 function handleDrop(e) {
-    e.stopPropagation();
     e.preventDefault();
+    e.stopPropagation();
 
     log('Élément déposé, mise à jour de l\'ordre');
     updateWindowOrder();
-    return false;
 }
 
 function handleDragEnd(e) {
     e.currentTarget.classList.remove('dragging');
-    currentDraggedItem = null;
     log('Fin du glisser-déposer');
+    currentDraggedItem = null;
 }
 
 function getDragAfterElement(container, y) {
@@ -688,15 +688,27 @@ const keyNames = {
 
 // Configurer une touche
 function configureHotkey(hotkeyId) {
+    console.log('[RustFocus] ========================================');
+    console.log('[RustFocus] CONFIGURER HOTKEY APPELÉ:', hotkeyId);
+    console.log('[RustFocus] ========================================');
+
     log('Configuration de la touche:', hotkeyId);
 
     // Si on est déjà en train de configurer, annuler
     if (currentlyConfiguring) {
+        log('Annulation de la configuration précédente:', currentlyConfiguring);
         cancelHotkeyConfiguration();
     }
 
     currentlyConfiguring = hotkeyId;
     const kbdElement = document.getElementById(`hotkey-${hotkeyId}`);
+
+    if (!kbdElement) {
+        logError('Élément kbd non trouvé:', `hotkey-${hotkeyId}`);
+        return;
+    }
+
+    log('Élément kbd trouvé:', kbdElement);
 
     // Changer l'affichage
     kbdElement.textContent = 'Appuyez sur une touche...';
@@ -783,73 +795,85 @@ function checkHotkeyConflict(key, excludeId) {
 
 // Appliquer les changements
 async function applyHotkeys() {
-log('Application des changements de touches...');
+    console.log('[RustFocus] ========================================');
+    console.log('[RustFocus] APPLIQUER LES HOTKEYS APPELÉ !');
+    console.log('[RustFocus] ========================================');
 
-const applyBtn = document.getElementById('apply-hotkeys-btn');
-if (applyBtn) {
-    applyBtn.disabled = true;
-    applyBtn.textContent = '🔄 Application...';
-}
+    log('Application des changements de touches...');
 
-try {
-    // Créer une nouvelle configuration basée sur les touches personnalisées
-    const customHotkeys = [];
-
-    // Ajouter les touches personnalisées
-    customHotkeys.push({
-        id: 1,
-        modifiers: 0,
-        key_code: hotkeyConfig.next.vkCode,
-        action: { NextWindow: {} }
-    });
-
-    customHotkeys.push({
-        id: 2,
-        modifiers: 0,
-        key_code: hotkeyConfig.prev.vkCode,
-        action: { PreviousWindow: {} }
-    });
-
-    // F1-F8
-    for (let i = 0; i < 8; i++) {
-        const key = ['f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8'][i];
-        customHotkeys.push({
-            id: 10 + i,
-            modifiers: 0,
-            key_code: hotkeyConfig[key].vkCode,
-            action: { DirectWindow: i }
-        });
-    }
-
-    log('Configuration personnalisée à envoyer:', customHotkeys);
-
-    // Envoyer la configuration personnalisée au backend
-    await invoke('setup_custom_hotkeys', { hotkeys: customHotkeys });
-
-    log('✓ Raccourcis mis à jour avec succès !');
-
-    // Sauvegarder la configuration dans localStorage pour persistance
-    const configToSave = {
-        hotkeyConfig: hotkeyConfig,
-        timestamp: Date.now()
-    };
-    localStorage.setItem('rustfocus_hotkey_config', JSON.stringify(configToSave));
-    log('✓ Configuration sauvegardée dans localStorage');
-
-    updateStatusText('Raccourcis mis à jour avec succès ✓');
-
-    alert('Raccourcis mis à jour avec succès !\n\nLes nouveaux raccourcis sont maintenant actifs.');
-} catch (error) {
-    logError('Échec de la mise à jour des raccourcis:', error);
-    updateStatusText('Erreur lors de la mise à jour');
-    alert('Erreur lors de la mise à jour des raccourcis:\n' + error);
-} finally {
-    // Réactiver le bouton
+    const applyBtn = document.getElementById('apply-hotkeys-btn');
     if (applyBtn) {
-        applyBtn.disabled = false;
-        applyBtn.textContent = '💾 Appliquer les Changements';
+        applyBtn.disabled = true;
+        applyBtn.textContent = '🔄 Application...';
+        log('Bouton désactivé');
+    } else {
+        logError('Bouton apply-hotkeys-btn non trouvé !');
     }
-}
+
+    try {
+        // Créer une nouvelle configuration basée sur les touches personnalisées
+        const customHotkeys = [];
+
+        log('Configuration actuelle:', hotkeyConfig);
+
+        // Ajouter les touches personnalisées
+        customHotkeys.push({
+            id: 1,
+            modifiers: 0,
+            key_code: hotkeyConfig.next.vkCode,
+            action: { NextWindow: {} }
+        });
+
+        customHotkeys.push({
+            id: 2,
+            modifiers: 0,
+            key_code: hotkeyConfig.prev.vkCode,
+            action: { PreviousWindow: {} }
+        });
+
+        // F1-F8
+        for (let i = 0; i < 8; i++) {
+            const key = ['f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8'][i];
+            customHotkeys.push({
+                id: 10 + i,
+                modifiers: 0,
+                key_code: hotkeyConfig[key].vkCode,
+                action: { DirectWindow: i }
+            });
+        }
+
+        log('Configuration personnalisée à envoyer:', JSON.stringify(customHotkeys, null, 2));
+
+        // Envoyer la configuration personnalisée au backend
+        log('Envoi au backend...');
+        await invoke('setup_custom_hotkeys', { hotkeys: customHotkeys });
+        log('✓ Backend a répondu avec succès');
+
+        // Sauvegarder la configuration dans localStorage pour persistance
+        const configToSave = {
+            hotkeyConfig: hotkeyConfig,
+            timestamp: Date.now()
+        };
+        localStorage.setItem('rustfocus_hotkey_config', JSON.stringify(configToSave));
+        log('✓ Configuration sauvegardée dans localStorage');
+
+        updateStatusText('Raccourcis mis à jour avec succès ✓');
+
+        alert('Raccourcis mis à jour avec succès !\n\nLes nouveaux raccourcis sont maintenant actifs.');
+        log('✓ Raccourcis mis à jour avec succès !');
+    } catch (error) {
+        logError('Échec de la mise à jour des raccourcis:', error);
+        logError('Stack trace:', error.stack);
+        updateStatusText('Erreur lors de la mise à jour');
+        alert('Erreur lors de la mise à jour des raccourcis:\n' + error);
+    } finally {
+        // Réactiver le bouton
+        if (applyBtn) {
+            applyBtn.disabled = false;
+            applyBtn.textContent = '💾 Appliquer les Changements';
+            log('Bouton réactivé');
+        }
+    }
 }
 
 // Réinitialiser aux valeurs par défaut
@@ -889,3 +913,8 @@ function resetHotkeys() {
 window.configureHotkey = configureHotkey;
 window.applyHotkeys = applyHotkeys;
 window.resetHotkeys = resetHotkeys;
+
+log('✓ Fonctions globales exposées:');
+log('  - window.configureHotkey:', typeof window.configureHotkey);
+log('  - window.applyHotkeys:', typeof window.applyHotkeys);
+log('  - window.resetHotkeys:', typeof window.resetHotkeys);
