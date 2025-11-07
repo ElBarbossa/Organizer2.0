@@ -222,9 +222,11 @@ function renderWindowList() {
             </div>
         `;
 
-        // Add drag event listeners
+        // Add drag event listeners (tous requis pour le bon fonctionnement)
         li.addEventListener('dragstart', handleDragStart);
         li.addEventListener('dragover', handleDragOver);
+        li.addEventListener('dragenter', handleDragEnter);
+        li.addEventListener('dragleave', handleDragLeave);
         li.addEventListener('drop', handleDrop);
         li.addEventListener('dragend', handleDragEnd);
 
@@ -252,35 +254,59 @@ function handleDragStart(e) {
     currentDraggedItem = e.currentTarget;
     e.currentTarget.classList.add('dragging');
     e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/html', e.currentTarget.innerHTML);
+    // Important: setData est requis pour certains navigateurs
+    e.dataTransfer.setData('text/plain', e.currentTarget.dataset.handle);
     log('Début du glisser-déposer:', e.currentTarget.dataset.handle);
 }
 
 function handleDragOver(e) {
+    // CRUCIAL: preventDefault pour autoriser le drop
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
 
-    // Si c'est un item (li), trouver le conteneur parent
-    const container = e.currentTarget.classList.contains('window-item')
-        ? e.currentTarget.parentElement
-        : e.currentTarget;
-
-    const afterElement = getDragAfterElement(container, e.clientY);
     const draggable = currentDraggedItem;
+    if (!draggable) return false;
 
-    if (draggable && draggable !== e.currentTarget) {
-        if (afterElement == null) {
-            container.appendChild(draggable);
-        } else {
-            container.insertBefore(draggable, afterElement);
-        }
+    // Trouver le conteneur
+    const container = e.currentTarget.parentElement;
+
+    // Déterminer où insérer l'élément
+    const afterElement = getDragAfterElement(container, e.clientY);
+
+    if (afterElement == null) {
+        container.appendChild(draggable);
+    } else {
+        container.insertBefore(draggable, afterElement);
     }
 
     return false;
 }
 
+function handleDragEnter(e) {
+    // Prévenir le comportement par défaut
+    e.preventDefault();
+
+    // Ajouter une classe pour le feedback visuel si nécessaire
+    if (e.currentTarget.classList.contains('window-item')) {
+        e.currentTarget.classList.add('drag-over');
+    }
+}
+
+function handleDragLeave(e) {
+    // Retirer la classe de feedback visuel
+    if (e.currentTarget.classList.contains('window-item')) {
+        e.currentTarget.classList.remove('drag-over');
+    }
+}
+
 function handleDrop(e) {
     e.preventDefault();
+    e.stopPropagation();
+
+    // Retirer les classes de feedback visuel
+    document.querySelectorAll('.window-item').forEach(item => {
+        item.classList.remove('drag-over');
+    });
 
     log('Élément déposé, mise à jour de l\'ordre');
     updateWindowOrder();
@@ -290,6 +316,12 @@ function handleDrop(e) {
 
 function handleDragEnd(e) {
     e.currentTarget.classList.remove('dragging');
+
+    // Nettoyer toutes les classes de feedback visuel
+    document.querySelectorAll('.window-item').forEach(item => {
+        item.classList.remove('drag-over');
+    });
+
     log('Fin du glisser-déposer');
     currentDraggedItem = null;
 }
