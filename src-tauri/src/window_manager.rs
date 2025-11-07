@@ -10,7 +10,7 @@ use windows::Win32::System::Threading::{
 use windows::Win32::UI::WindowsAndMessaging::{
     EnumWindows, GetClassNameW, GetWindowTextW, GetWindowThreadProcessId, IsWindowVisible,
     SetForegroundWindow, SetWindowPos, SWP_NOMOVE, SWP_NOSIZE,
-    HWND_TOP, AllowSetForegroundWindow,
+    HWND_TOP, AllowSetForegroundWindow, ShowWindow, SW_HIDE, SW_SHOW,
 };
 
 // Note: Toolbar messages kept for future reference if needed
@@ -154,14 +154,17 @@ pub fn focus_window(handle: isize) -> Result<()> {
     Ok(())
 }
 
-/// Update window Z-order based on character names order
-/// Uses SetWindowPos with HWND_TOP in REVERSE order to stack windows correctly
+/// Update window Z-order and taskbar order based on character names order
 ///
-/// Logic: To get final order [A, B, C] (A on top), we process in reverse:
-/// 1. SetWindowPos(C, HWND_TOP) - C is now on top
-/// 2. SetWindowPos(B, HWND_TOP) - B goes above C
-/// 3. SetWindowPos(A, HWND_TOP) - A goes above B and C
-/// Result: A, B, C (desired order)
+/// NEW APPROACH: Hide/Show windows in desired order
+/// Windows updates the taskbar when windows are shown, so by hiding all windows
+/// then showing them in the desired order, we get the correct taskbar arrangement.
+///
+/// Logic: To get final order [A, B, C]:
+/// 1. Hide all windows (SW_HIDE) - removes from taskbar
+/// 2. Wait 250ms for Windows to process
+/// 3. Show windows in order A, B, C (SW_SHOW) - adds back to taskbar in order
+/// Result: A, B, C in taskbar (left to right)
 pub fn reorder_taskbar_windows(order: Vec<String>) -> Result<()> {
     println!("DEBUG: ========================================");
     println!("DEBUG: Starting taskbar window reordering for {} windows", order.len());
@@ -205,78 +208,47 @@ pub fn reorder_taskbar_windows(order: Vec<String>) -> Result<()> {
     println!("DEBUG: ========================================");
 
     unsafe {
-        // NEW METHOD: Process windows in REVERSE order, placing each at HWND_TOP
-        // This way, the first window in the desired order ends up on top
-        // We also use AllowSetForegroundWindow to bypass Windows restrictions
-        println!("DEBUG: Processing windows in REVERSE order with HWND_TOP + SetForegroundWindow");
+        // NEW APPROACH: Hide all windows, then show in desired order
+        println!("DEBUG: STEP 1 - Hiding all windows to clear taskbar...");
 
-        // Grant permission to set foreground window
-        let current_pid = GetCurrentProcessId();
-        println!("DEBUG: Granting foreground permission to process {}", current_pid);
-        let _ = AllowSetForegroundWindow(current_pid);
-
-        for (index, (name, handle)) in ordered_handles.iter().rev().enumerate() {
+        for (index, (name, handle)) in ordered_handles.iter().enumerate() {
             let hwnd = HWND(*handle);
-
-            println!(
-                "DEBUG: Processing window ({}/{}) at TOP: {}",
-                index + 1,
-                ordered_handles.len(),
-                name
-            );
-
-            // Grant permission again for this specific operation
-            let _ = AllowSetForegroundWindow(current_pid);
-
-            // 1. Place window at the top of Z-order
-            let result = SetWindowPos(
-                hwnd,
-                HWND_TOP,
-                0, 0, 0, 0,
-                SWP_NOMOVE | SWP_NOSIZE,
-            );
-
-            if result.is_err() {
-                println!("DEBUG: Failed to position window {}: {:?}", name, result.err());
-            } else {
-                println!("DEBUG: Successfully positioned window {} at TOP", name);
-            }
-
-            // 2. Immediately set it as foreground window to reinforce the ordering
-            let fg_result = SetForegroundWindow(hwnd);
-            if fg_result.as_bool() {
-                println!("DEBUG: Successfully set {} as foreground", name);
-            } else {
-                println!("DEBUG: Failed to set {} as foreground (may need admin rights)", name);
-            }
-
-            // Delay to ensure Windows processes the change
-            std::thread::sleep(std::time::Duration::from_millis(100));
+            ShowWindow(hwnd, SW_HIDE);
+            println!("DEBUG: Hidden ({}/{}): {}", index + 1, ordered_handles.len(), name);
         }
 
-        // After positioning all windows, do a final focus pass to reinforce the order
+        // Wait for Windows Shell to process the hide operations
+        println!("DEBUG: Waiting 250ms for Windows to process...");
+        std::thread::sleep(std::time::Duration::from_millis(250));
+
+        // Show windows in the desired order (first to last)
+        // Windows should add them to the taskbar in this order
         println!("DEBUG: ========================================");
-        println!("DEBUG: Final focus pass in correct order to reinforce arrangement");
+        println!("DEBUG: STEP 2 - Showing windows in desired order...");
+
+        let current_pid = GetCurrentProcessId();
 
         for (index, (name, handle)) in ordered_handles.iter().enumerate() {
             let hwnd = HWND(*handle);
 
-            // Grant permission before each SetForegroundWindow
-            let _ = AllowSetForegroundWindow(current_pid);
+            println!("DEBUG: Showing ({}/{}): {}", index + 1, ordered_handles.len(), name);
+            ShowWindow(hwnd, SW_SHOW);
 
-            let fg_result = SetForegroundWindow(hwnd);
-            if fg_result.as_bool() {
-                println!("DEBUG: Focused ({}/{}): {}", index + 1, ordered_handles.len(), name);
-            } else {
-                println!("DEBUG: Failed to focus ({}/{}): {} (restricted)", index + 1, ordered_handles.len(), name);
+            // For the first window, give it foreground to ensure it's fully visible
+            if index == 0 {
+                let _ = AllowSetForegroundWindow(current_pid);
+                SetForegroundWindow(hwnd);
+                println!("DEBUG: Set first window {} as foreground", name);
             }
 
-            std::thread::sleep(std::time::Duration::from_millis(100));
+            // Small delay between each show to ensure Windows processes them in order
+            std::thread::sleep(std::time::Duration::from_millis(50));
         }
     }
 
     println!("DEBUG: ========================================");
     println!("DEBUG: Taskbar window reordering completed");
+    println!("DEBUG: Windows should now be ordered in taskbar as: {:?}", order);
     Ok(())
 }
 
