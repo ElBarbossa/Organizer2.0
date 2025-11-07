@@ -191,8 +191,12 @@ function renderWindowList() {
     const listElement = document.getElementById('window-list');
     listElement.innerHTML = '';
 
+    // Retirer les anciens listeners du conteneur pour éviter les doublons
+    const newListElement = listElement.cloneNode(true);
+    listElement.parentNode.replaceChild(newListElement, listElement);
+
     if (windowList.length === 0) {
-        listElement.innerHTML = `
+        newListElement.innerHTML = `
             <div class="empty-state">
                 <div class="empty-state-icon">🎮</div>
                 <div class="empty-state-text">Aucune fenêtre Dofus détectée</div>
@@ -222,12 +226,9 @@ function renderWindowList() {
             </div>
         `;
 
-        // Add drag event listeners (tous requis pour le bon fonctionnement)
+        // Add drag event listeners
+        // dragstart et dragend sur les items
         li.addEventListener('dragstart', handleDragStart);
-        li.addEventListener('dragover', handleDragOver);
-        li.addEventListener('dragenter', handleDragEnter);
-        li.addEventListener('dragleave', handleDragLeave);
-        li.addEventListener('drop', handleDrop);
         li.addEventListener('dragend', handleDragEnd);
 
         // Add focus button listener
@@ -243,8 +244,12 @@ function renderWindowList() {
             }
         });
 
-        listElement.appendChild(li);
+        newListElement.appendChild(li);
     });
+
+    // Ajouter dragover et drop sur le CONTENEUR (crucial pour le bon fonctionnement)
+    newListElement.addEventListener('dragover', handleDragOver);
+    newListElement.addEventListener('drop', handleDrop);
 
     log('Liste des fenêtres rendue:', windowList.length, 'éléments');
 }
@@ -267,8 +272,8 @@ function handleDragOver(e) {
     const draggable = currentDraggedItem;
     if (!draggable) return false;
 
-    // Trouver le conteneur
-    const container = e.currentTarget.parentElement;
+    // e.currentTarget est maintenant le conteneur (ul)
+    const container = e.currentTarget;
 
     // Déterminer où insérer l'élément
     const afterElement = getDragAfterElement(container, e.clientY);
@@ -282,31 +287,9 @@ function handleDragOver(e) {
     return false;
 }
 
-function handleDragEnter(e) {
-    // Prévenir le comportement par défaut
-    e.preventDefault();
-
-    // Ajouter une classe pour le feedback visuel si nécessaire
-    if (e.currentTarget.classList.contains('window-item')) {
-        e.currentTarget.classList.add('drag-over');
-    }
-}
-
-function handleDragLeave(e) {
-    // Retirer la classe de feedback visuel
-    if (e.currentTarget.classList.contains('window-item')) {
-        e.currentTarget.classList.remove('drag-over');
-    }
-}
-
 function handleDrop(e) {
     e.preventDefault();
     e.stopPropagation();
-
-    // Retirer les classes de feedback visuel
-    document.querySelectorAll('.window-item').forEach(item => {
-        item.classList.remove('drag-over');
-    });
 
     log('Élément déposé, mise à jour de l\'ordre');
     updateWindowOrder();
@@ -316,12 +299,6 @@ function handleDrop(e) {
 
 function handleDragEnd(e) {
     e.currentTarget.classList.remove('dragging');
-
-    // Nettoyer toutes les classes de feedback visuel
-    document.querySelectorAll('.window-item').forEach(item => {
-        item.classList.remove('drag-over');
-    });
-
     log('Fin du glisser-déposer');
     currentDraggedItem = null;
 }
