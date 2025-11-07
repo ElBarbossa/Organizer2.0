@@ -167,7 +167,7 @@ impl HotkeyManager {
 
                 // Essayer de recevoir un événement (non bloquant)
                 if let Ok(event) = receiver.try_recv() {
-                    use std::time::{Duration, Instant};
+                    use std::time::Instant;
 
                     static mut LAST_EVENT_TIME: Option<Instant> = None;
                     static mut LAST_EVENT_ID: u32 = 0;
@@ -175,9 +175,11 @@ impl HotkeyManager {
                     let now = Instant::now();
                     unsafe {
                         // Éviter les répétitions trop rapides (dédoublonnage)
+                        // Augmentation du seuil à 300ms pour éviter les doubles détections
                         if let Some(last_time) = LAST_EVENT_TIME {
-                            if now.duration_since(last_time).as_millis() < 100 &&
+                            if now.duration_since(last_time).as_millis() < 300 &&
                                LAST_EVENT_ID == event.id {
+                                println!("[HotkeyManager] Event ignored (duplicate): {:?}", event.id);
                                 continue;
                             }
                         }
