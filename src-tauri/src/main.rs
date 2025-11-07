@@ -137,6 +137,44 @@ fn setup_default_hotkeys(
     Ok(())
 }
 
+/// Register custom hotkeys
+#[tauri::command]
+fn setup_custom_hotkeys(
+    state: tauri::State<AppState>,
+    app_handle: AppHandle,
+    hotkeys: Vec<Hotkey>,
+) -> Result<(), String> {
+    let manager = state.hotkey_manager.lock();
+
+    // Unregister all existing hotkeys first
+    manager
+        .unregister_all()
+        .map_err(|e| format!("Failed to unregister hotkeys: {}", e))?;
+
+    // Register custom hotkeys
+    for hotkey in hotkeys {
+        manager
+            .register_hotkey(hotkey)
+            .map_err(|e| format!("Failed to register custom hotkey: {}", e))?;
+    }
+
+    // Set up the callback for hotkey events
+    let window_list = Arc::clone(&state.window_list);
+    manager.set_callback(move |action| {
+        handle_hotkey_action(action, &window_list, &app_handle);
+    });
+
+    // Start listening for hotkeys
+    manager
+        .start_listening()
+        .map_err(|e| format!("Failed to start listening: {}", e))?;
+
+    Ok(())
+}
+
+// Track current window index for cycling
+static mut CURRENT_WINDOW_INDEX: usize = 0;
+
 /// Handle hotkey actions
 fn handle_hotkey_action(action: HotkeyAction, window_list: &Arc<Mutex<Vec<DofusWindow>>>, app_handle: &AppHandle) {
     let windows = window_list.lock();
@@ -150,19 +188,30 @@ fn handle_hotkey_action(action: HotkeyAction, window_list: &Arc<Mutex<Vec<DofusW
 
     let target_index = match action {
         HotkeyAction::NextWindow => {
-            // For now, just focus the first window
-            // TODO: Implement proper cycling through windows
-            println!("DEBUG: NextWindow action - focusing first window");
-            0
+            // Cycle to next window
+            unsafe {
+                CURRENT_WINDOW_INDEX = (CURRENT_WINDOW_INDEX + 1) % windows.len();
+                println!("DEBUG: NextWindow action - cycling to window {}", CURRENT_WINDOW_INDEX);
+                CURRENT_WINDOW_INDEX
+            }
         }
         HotkeyAction::PreviousWindow => {
-            // For now, just focus the last window
-            // TODO: Implement proper cycling through windows
-            println!("DEBUG: PreviousWindow action - focusing last window");
-            windows.len().saturating_sub(1)
+            // Cycle to previous window
+            unsafe {
+                if CURRENT_WINDOW_INDEX == 0 {
+                    CURRENT_WINDOW_INDEX = windows.len() - 1;
+                } else {
+                    CURRENT_WINDOW_INDEX -= 1;
+                }
+                println!("DEBUG: PreviousWindow action - cycling to window {}", CURRENT_WINDOW_INDEX);
+                CURRENT_WINDOW_INDEX
+            }
         }
         HotkeyAction::DirectWindow(index) => {
             if index < windows.len() {
+                unsafe {
+                    CURRENT_WINDOW_INDEX = index;
+                }
                 println!("DEBUG: DirectWindow action - focusing window at index {}", index);
                 index
             } else {
@@ -244,6 +293,7 @@ fn main() {
             focus_window,
             update_window_order,
             setup_default_hotkeys,
+            setup_custom_hotkeys,
             save_profile,
             load_profile,
             list_profiles,

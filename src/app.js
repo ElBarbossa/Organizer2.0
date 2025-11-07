@@ -703,8 +703,37 @@ async function applyHotkeys() {
     log('Application des changements de touches...');
 
     try {
-        // Réenregistrer tous les hotkeys
-        await invoke('setup_default_hotkeys');
+        // Créer une nouvelle configuration basée sur les touches personnalisées
+        const customHotkeys = [];
+
+        // Ajouter les touches personnalisées
+        customHotkeys.push({
+            id: 1,
+            modifiers: 0,
+            key_code: hotkeyConfig.next.vkCode,
+            action: { NextWindow: {} }
+        });
+
+        customHotkeys.push({
+            id: 2,
+            modifiers: 0,
+            key_code: hotkeyConfig.prev.vkCode,
+            action: { PreviousWindow: {} }
+        });
+
+        // F1-F8
+        for (let i = 0; i < 8; i++) {
+            const key = ['f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8'][i];
+            customHotkeys.push({
+                id: 10 + i,
+                modifiers: 0,
+                key_code: hotkeyConfig[key].vkCode,
+                action: { DirectWindow: i }
+            });
+        }
+
+        // Envoyer la configuration personnalisée au backend
+        await invoke('setup_custom_hotkeys', { hotkeys: customHotkeys });
 
         log('✓ Raccourcis mis à jour avec succès !');
         updateStatusText('Raccourcis mis à jour avec succès ✓');
