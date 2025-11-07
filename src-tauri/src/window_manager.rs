@@ -5,8 +5,10 @@ use std::os::windows::ffi::OsStringExt;
 use windows::core::PCWSTR;
 use windows::Win32::Foundation::{BOOL, HWND, LPARAM, WPARAM};
 use windows::Win32::System::ProcessStatus::GetProcessImageFileNameW;
-use windows::Win32::System::Threading::OpenProcess;
-use windows::Win32::System::Threading::PROCESS_QUERY_LIMITED_INFORMATION;
+use windows::Win32::System::Threading::{
+    OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+    AllowSetForegroundWindow, GetCurrentProcessId,
+};
 use windows::Win32::System::Memory::{VirtualAllocEx, VirtualFreeEx, MEM_COMMIT, MEM_RELEASE, PAGE_READWRITE};
 use windows::Win32::UI::WindowsAndMessaging::{
     EnumWindows, GetClassNameW, GetWindowTextW, GetWindowThreadProcessId, IsWindowVisible,
@@ -272,19 +274,28 @@ pub fn reorder_taskbar_windows(order: Vec<String>) -> Result<()> {
     unsafe {
         // NEW METHOD: Process windows in REVERSE order, placing each at HWND_TOP
         // This way, the first window in the desired order ends up on top
-        println!("DEBUG: Processing windows in REVERSE order with HWND_TOP");
+        // We also use AllowSetForegroundWindow to bypass Windows restrictions
+        println!("DEBUG: Processing windows in REVERSE order with HWND_TOP + SetForegroundWindow");
+
+        // Grant permission to set foreground window
+        let current_pid = GetCurrentProcessId();
+        println!("DEBUG: Granting foreground permission to process {}", current_pid);
+        let _ = AllowSetForegroundWindow(current_pid);
 
         for (index, (name, handle)) in ordered_handles.iter().rev().enumerate() {
             let hwnd = HWND(*handle);
 
             println!(
-                "DEBUG: Placing window ({}/{}) at TOP: {}",
+                "DEBUG: Processing window ({}/{}) at TOP: {}",
                 index + 1,
                 ordered_handles.len(),
                 name
             );
 
-            // Place window at the top of Z-order
+            // Grant permission again for this specific operation
+            let _ = AllowSetForegroundWindow(current_pid);
+
+            // 1. Place window at the top of Z-order
             let result = SetWindowPos(
                 hwnd,
                 HWND_TOP,
@@ -298,8 +309,16 @@ pub fn reorder_taskbar_windows(order: Vec<String>) -> Result<()> {
                 println!("DEBUG: Successfully positioned window {} at TOP", name);
             }
 
-            // Small delay to ensure Windows processes the change
-            std::thread::sleep(std::time::Duration::from_millis(50));
+            // 2. Immediately set it as foreground window to reinforce the ordering
+            let fg_result = SetForegroundWindow(hwnd);
+            if fg_result.as_bool() {
+                println!("DEBUG: Successfully set {} as foreground", name);
+            } else {
+                println!("DEBUG: Failed to set {} as foreground (may need admin rights)", name);
+            }
+
+            // Delay to ensure Windows processes the change
+            std::thread::sleep(std::time::Duration::from_millis(100));
         }
 
         // After positioning all windows, do a final focus pass to reinforce the order
@@ -308,8 +327,17 @@ pub fn reorder_taskbar_windows(order: Vec<String>) -> Result<()> {
 
         for (index, (name, handle)) in ordered_handles.iter().enumerate() {
             let hwnd = HWND(*handle);
-            SetForegroundWindow(hwnd);
-            println!("DEBUG: Focused ({}/{}): {}", index + 1, ordered_handles.len(), name);
+
+            // Grant permission before each SetForegroundWindow
+            let _ = AllowSetForegroundWindow(current_pid);
+
+            let fg_result = SetForegroundWindow(hwnd);
+            if fg_result.as_bool() {
+                println!("DEBUG: Focused ({}/{}): {}", index + 1, ordered_handles.len(), name);
+            } else {
+                println!("DEBUG: Failed to focus ({}/{}): {} (restricted)", index + 1, ordered_handles.len(), name);
+            }
+
             std::thread::sleep(std::time::Duration::from_millis(100));
         }
     }
