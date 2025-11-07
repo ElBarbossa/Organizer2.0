@@ -142,33 +142,48 @@ fn handle_hotkey_action(action: HotkeyAction, window_list: &Arc<Mutex<Vec<DofusW
     let windows = window_list.lock();
 
     if windows.is_empty() {
+        println!("DEBUG: No windows available for hotkey action");
         return;
     }
 
+    println!("DEBUG: Handling hotkey action {:?} with {} windows", action, windows.len());
+
     let target_index = match action {
         HotkeyAction::NextWindow => {
-            // Find current focused window and move to next
-            // For now, just cycle through
-            0 // This would need more logic to track current window
+            // For now, just focus the first window
+            // TODO: Implement proper cycling through windows
+            println!("DEBUG: NextWindow action - focusing first window");
+            0
         }
         HotkeyAction::PreviousWindow => {
-            // Find current focused window and move to previous
-            windows.len() - 1
+            // For now, just focus the last window
+            // TODO: Implement proper cycling through windows
+            println!("DEBUG: PreviousWindow action - focusing last window");
+            windows.len().saturating_sub(1)
         }
         HotkeyAction::DirectWindow(index) => {
             if index < windows.len() {
+                println!("DEBUG: DirectWindow action - focusing window at index {}", index);
                 index
             } else {
+                println!("DEBUG: DirectWindow action - index {} out of bounds ({} windows)", index, windows.len());
                 return;
             }
         }
     };
 
     if let Some(window) = windows.get(target_index) {
-        let _ = window_manager::focus_window(window.handle);
+        println!("DEBUG: Focusing window '{}' at index {}", window.title, target_index);
+        let result = window_manager::focus_window(window.handle);
+        match result {
+            Ok(_) => println!("DEBUG: Successfully focused window"),
+            Err(e) => println!("DEBUG: Failed to focus window: {}", e),
+        }
 
         // Emit event to frontend to update UI
         let _ = app_handle.emit_all("window-focused", window.handle);
+    } else {
+        println!("DEBUG: No window found at index {}", target_index);
     }
 }
 
