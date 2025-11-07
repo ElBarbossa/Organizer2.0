@@ -267,8 +267,9 @@ function handleMouseDown(e) {
     dragStartX = e.clientX;
     dragStartY = e.clientY;
 
-    // Prevent default to avoid any browser drag behavior
+    // Prevent default to avoid any browser behaviors
     e.preventDefault();
+    e.stopPropagation();
 }
 
 function handleMouseMove(e) {
@@ -297,6 +298,10 @@ function handleMouseMove(e) {
         // Prevent text selection and unwanted behaviors
         document.body.style.userSelect = 'none';
         document.body.style.cursor = 'move';
+
+        // Prevent default to avoid browser drag
+        e.preventDefault();
+        e.stopPropagation();
     }
 }
 
@@ -306,16 +311,7 @@ function handleGlobalMouseMove(e) {
     const container = currentDraggedItem.closest('.window-list');
     if (!container) return;
 
-    // Prevent scrolling issues by checking if we're over the container
-    const containerRect = container.getBoundingClientRect();
-    const isOverContainer = e.clientX >= containerRect.left &&
-                          e.clientX <= containerRect.right &&
-                          e.clientY >= containerRect.top &&
-                          e.clientY <= containerRect.bottom;
-
-    if (!isOverContainer) return;
-
-    // Prevent default to stop any unwanted scrolling
+    // Prevent default to stop any unwanted scrolling or browser behaviors
     e.preventDefault();
 
     // Déterminer où insérer l'élément

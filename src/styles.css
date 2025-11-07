@@ -268,29 +268,37 @@ body {
     pointer-events: none;
 }
 
+/* Completely disable browser drag and drop behaviors */
+* {
+    -webkit-user-drag: none !important;
+    -webkit-user-drop: none !important;
+    -webkit-user-select: none !important;
+    -moz-user-select: none !important;
+    -ms-user-select: none !important;
+    user-select: none !important;
+}
+
 /* Hide any browser-native drop indicators */
 .window-list::after,
-.window-list::before {
+.window-list::before,
+.window-item::after,
+.window-item::before {
     content: none !important;
+    display: none !important;
 }
 
-/* Prevent browser drop zone styling */
+/* Prevent all drag-related styling */
 .window-list,
 .window-item {
-    -webkit-user-drag: none;
-    -webkit-user-select: none;
-    -moz-user-select: none;
-    -ms-user-select: none;
-    user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
 }
 
-/* Prevent any drop zone styling */
-* {
-    -webkit-user-drop: none;
-}
-
-.window-list * {
-    -webkit-user-drop: none;
+/* Ensure dragging element has no browser interference */
+.dragging {
+    -webkit-user-drag: none !important;
+    -webkit-user-drop: none !important;
+    pointer-events: auto !important;
 }
 
 /* Settings */
