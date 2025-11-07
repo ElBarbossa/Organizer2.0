@@ -220,7 +220,7 @@ function renderWindowList() {
                 <div class="window-title">${escapeHtml(window.title)}</div>
             </div>
             <div class="window-actions">
-                <button class="icon-btn focus-btn" data-handle="${window.handle}">
+                <button class="icon-btn focus-btn" data-handle="${window.handle}" onclick="this.blur()">
                     👁️ Focus
                 </button>
             </div>
@@ -264,16 +264,27 @@ function handleDragStart(e) {
     // Important: setData est requis pour certains navigateurs
     e.dataTransfer.setData('text/plain', e.currentTarget.dataset.handle);
     log('Début du glisser-déposer:', e.currentTarget.dataset.handle);
+
+    // Afficher l'état du drag pour debug
+    console.log('[DRAG] DataTransfer types:', e.dataTransfer.types);
+    console.log('[DRAG] DataTransfer effectAllowed:', e.dataTransfer.effectAllowed);
 }
 
 function handleDragOver(e) {
     console.log('[DRAG] handleDragOver called', e);
+    console.log('[DRAG] Target element:', e.target);
+    console.log('[DRAG] Current target:', e.currentTarget);
+    console.log('[DRAG] DataTransfer types:', e.dataTransfer.types);
+
     // CRUCIAL: preventDefault pour autoriser le drop
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
 
     const draggable = currentDraggedItem;
-    if (!draggable) return false;
+    if (!draggable) {
+        console.log('[DRAG] No draggable item');
+        return false;
+    }
 
     // e.currentTarget est maintenant le conteneur (ul)
     const container = e.currentTarget;

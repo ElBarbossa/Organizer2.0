@@ -262,6 +262,11 @@ body {
     border-color: var(--primary-color);
 }
 
+/* Fix drag and drop - prevent buttons from interfering */
+.dragging .icon-btn {
+    pointer-events: none;
+}
+
 /* Settings */
 .settings-section {
     max-width: 600px;
