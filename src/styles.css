@@ -22,7 +22,7 @@ body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     background: var(--bg-primary);
     color: var(--text-primary);
-    overflow: hidden;
+    overflow: hidden; /* Empêche le défilement sur le corps principal */
 }
 
 .app-container {
@@ -96,7 +96,8 @@ body {
     display: none;
     flex: 1;
     padding: 20px;
-    overflow-y: auto;
+    overflow-y: auto; /* Permet le défilement vertical si nécessaire */
+    overflow-x: hidden; /* CORRECTION: Empêche le débordement horizontal */
 }
 
 .tab-content.active {
@@ -176,7 +177,8 @@ body {
 /* Window List */
 .window-list-container {
     flex: 1;
-    overflow-y: auto;
+    overflow-y: auto; /* Permet le défilement vertical pour la liste */
+    overflow-x: hidden; /* CORRECTION: Empêche le débordement horizontal */
 }
 
 .hint-text {
@@ -203,7 +205,8 @@ body {
     display: flex;
     align-items: center;
     gap: 12px;
-    user-select: none; /* Prevent text selection during drag */
+    user-select: none; /* OPTIMISATION: Empêche la sélection de texte UNIQUEMENT ici */
+    -webkit-user-drag: none;
 }
 
 .window-item:hover {
@@ -263,45 +266,6 @@ body {
     border-color: var(--primary-color);
 }
 
-/* Fix drag and drop - prevent buttons from interfering */
-.dragging .icon-btn {
-    pointer-events: none;
-}
-
-/* Completely disable browser drag and drop behaviors */
-* {
-    -webkit-user-drag: none !important;
-    -webkit-user-drop: none !important;
-    -webkit-user-select: none !important;
-    -moz-user-select: none !important;
-    -ms-user-select: none !important;
-    user-select: none !important;
-}
-
-/* Hide any browser-native drop indicators */
-.window-list::after,
-.window-list::before,
-.window-item::after,
-.window-item::before {
-    content: none !important;
-    display: none !important;
-}
-
-/* Prevent all drag-related styling */
-.window-list,
-.window-item {
-    -webkit-touch-callout: none;
-    -webkit-tap-highlight-color: transparent;
-}
-
-/* Ensure dragging element has no browser interference */
-.dragging {
-    -webkit-user-drag: none !important;
-    -webkit-user-drop: none !important;
-    pointer-events: auto !important;
-}
-
-/* Settings */
 .settings-section {
     max-width: 600px;
     margin: 0 auto;
