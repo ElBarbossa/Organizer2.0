@@ -7,6 +7,15 @@ mod window_manager;
 
 use anyhow::Result;
 use hotkey_manager::{vk_codes, Hotkey, HotkeyAction, HotkeyManager};
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HotkeyConfig {
+    pub id: i32,
+    pub modifiers: u32,
+    pub key_code: u32,
+    pub action: HotkeyAction,
+}
 use parking_lot::Mutex;
 use profile_manager::{Profile, ProfileManager};
 use std::sync::Arc;
