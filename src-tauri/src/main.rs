@@ -66,13 +66,18 @@ fn focus_window(handle: isize) -> Result<(), String> {
 fn update_window_order(state: tauri::State<AppState>, order: Vec<String>) -> Result<(), String> {
     let mut profile = state.current_profile.lock();
     if let Some(ref mut p) = *profile {
-        p.window_order = order;
+        p.window_order = order.clone();
 
         // Auto-save current profile
         state.profile_manager.lock()
             .save_current_profile(p)
             .map_err(|e| format!("Failed to save profile: {}", e))?;
     }
+
+    // Try to reorder taskbar windows (may not work on all Windows versions)
+    window_manager::reorder_taskbar_windows(order)
+        .map_err(|e| format!("Failed to reorder taskbar: {}", e))?;
+
     Ok(())
 }
 

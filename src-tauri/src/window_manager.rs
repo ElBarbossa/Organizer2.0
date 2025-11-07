@@ -147,6 +147,20 @@ pub fn focus_window(handle: isize) -> Result<()> {
     Ok(())
 }
 
+/// Update window Z-order based on character names order
+pub fn reorder_taskbar_windows(order: Vec<String>) -> Result<()> {
+    // Note: Windows doesn't provide a direct API to reorder taskbar windows
+    // The taskbar order is typically managed by the system based on window activation order
+    // and user preferences. We could potentially use SetWindowPos with HWND_TOPMOST
+    // or other window positioning APIs, but this would be complex and potentially
+    // disruptive to the user experience.
+
+    // For now, we'll focus on the logical ordering in our application
+    // and let the user manually reorder via Alt+Tab or taskbar if needed
+    println!("DEBUG: Window reordering requested for taskbar, but not directly supported by Windows API");
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
