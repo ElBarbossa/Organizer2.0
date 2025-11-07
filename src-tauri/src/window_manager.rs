@@ -220,7 +220,13 @@ unsafe fn find_taskbar_toolbar() -> Option<HWND> {
 }
 
 /// Update window Z-order based on character names order
-/// Uses SetWindowPos with hWndInsertAfter to chain windows in the desired order
+/// Uses SetWindowPos with HWND_TOP in REVERSE order to stack windows correctly
+///
+/// Logic: To get final order [A, B, C] (A on top), we process in reverse:
+/// 1. SetWindowPos(C, HWND_TOP) - C is now on top
+/// 2. SetWindowPos(B, HWND_TOP) - B goes above C
+/// 3. SetWindowPos(A, HWND_TOP) - A goes above B and C
+/// Result: A, B, C (desired order)
 pub fn reorder_taskbar_windows(order: Vec<String>) -> Result<()> {
     println!("DEBUG: ========================================");
     println!("DEBUG: Starting taskbar window reordering for {} windows", order.len());
@@ -264,32 +270,24 @@ pub fn reorder_taskbar_windows(order: Vec<String>) -> Result<()> {
     println!("DEBUG: ========================================");
 
     unsafe {
-        // METHOD: Use SetWindowPos with hWndInsertAfter to chain windows
-        // This creates a sequence where each window is positioned after the previous one
-        println!("DEBUG: Using SetWindowPos with hWndInsertAfter to chain windows in Z-order");
+        // NEW METHOD: Process windows in REVERSE order, placing each at HWND_TOP
+        // This way, the first window in the desired order ends up on top
+        println!("DEBUG: Processing windows in REVERSE order with HWND_TOP");
 
-        let mut previous_hwnd: Option<HWND> = None;
-
-        for (index, (name, handle)) in ordered_handles.iter().enumerate() {
+        for (index, (name, handle)) in ordered_handles.iter().rev().enumerate() {
             let hwnd = HWND(*handle);
 
-            // For the first window, use HWND_TOP (or HWND(0))
-            // For subsequent windows, use the previous window's handle
-            let hwnd_insert_after = previous_hwnd.unwrap_or(HWND_TOP);
-
             println!(
-                "DEBUG: Positioning window ({}/{}): {} after {:?}",
+                "DEBUG: Placing window ({}/{}) at TOP: {}",
                 index + 1,
                 ordered_handles.len(),
-                name,
-                hwnd_insert_after
+                name
             );
 
-            // SetWindowPos with SWP_NOMOVE | SWP_NOSIZE to only change Z-order
-            // This should update the taskbar order as well
+            // Place window at the top of Z-order
             let result = SetWindowPos(
                 hwnd,
-                hwnd_insert_after,
+                HWND_TOP,
                 0, 0, 0, 0,
                 SWP_NOMOVE | SWP_NOSIZE,
             );
@@ -297,11 +295,8 @@ pub fn reorder_taskbar_windows(order: Vec<String>) -> Result<()> {
             if result.is_err() {
                 println!("DEBUG: Failed to position window {}: {:?}", name, result.err());
             } else {
-                println!("DEBUG: Successfully positioned window {}", name);
+                println!("DEBUG: Successfully positioned window {} at TOP", name);
             }
-
-            // Update previous_hwnd for the next iteration
-            previous_hwnd = Some(hwnd);
 
             // Small delay to ensure Windows processes the change
             std::thread::sleep(std::time::Duration::from_millis(50));
@@ -309,7 +304,7 @@ pub fn reorder_taskbar_windows(order: Vec<String>) -> Result<()> {
 
         // After positioning all windows, do a final focus pass to reinforce the order
         println!("DEBUG: ========================================");
-        println!("DEBUG: Final focus pass to reinforce window order");
+        println!("DEBUG: Final focus pass in correct order to reinforce arrangement");
 
         for (index, (name, handle)) in ordered_handles.iter().enumerate() {
             let hwnd = HWND(*handle);
