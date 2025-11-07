@@ -167,6 +167,24 @@ impl HotkeyManager {
 
                 // Essayer de recevoir un événement (non bloquant)
                 if let Ok(event) = receiver.try_recv() {
+                    use std::time::{Duration, Instant};
+
+                    static mut LAST_EVENT_TIME: Option<Instant> = None;
+                    static mut LAST_EVENT_ID: u32 = 0;
+
+                    let now = Instant::now();
+                    unsafe {
+                        // Éviter les répétitions trop rapides (dédoublonnage)
+                        if let Some(last_time) = LAST_EVENT_TIME {
+                            if now.duration_since(last_time).as_millis() < 100 &&
+                               LAST_EVENT_ID == event.id {
+                                continue;
+                            }
+                        }
+                        LAST_EVENT_TIME = Some(now);
+                        LAST_EVENT_ID = event.id;
+                    }
+
                     println!("[HotkeyManager] Received hotkey event: {:?}", event.id);
 
                     // Trouver l'action associée

@@ -303,34 +303,45 @@ function getDragAfterElement(container, y) {
 
 // Update window order after drag and drop
 async function updateWindowOrder() {
-    const items = document.querySelectorAll('.window-item');
-    const newOrder = [];
+log('=== UPDATE WINDOW ORDER CALLED ===');
+const items = document.querySelectorAll('.window-item');
+const newOrder = [];
 
-    items.forEach((item, index) => {
-        const handle = parseInt(item.dataset.handle);
-        const window = windowList.find(w => w.handle === handle);
-        if (window) {
-            newOrder.push(window);
-        }
+log('Nombre d\'éléments trouvés:', items.length);
 
-        // Update index display
-        const indexElement = item.querySelector('.window-index');
-        if (indexElement) {
-            indexElement.textContent = index + 1;
-        }
-    });
-
-    windowList = newOrder;
-    log('Nouvel ordre des fenêtres:', windowList.map(w => w.character_name));
-
-    // Send order to backend
-    const characterNames = newOrder.map(w => w.character_name);
-    try {
-        await invoke('update_window_order', { order: characterNames });
-        updateStatusText('Ordre des fenêtres mis à jour');
-    } catch (error) {
-        logError('Échec de la mise à jour de l\'ordre:', error);
+items.forEach((item, index) => {
+    const handle = parseInt(item.dataset.handle);
+    log(`Élément ${index}: handle=${handle}, dataset.handle=${item.dataset.handle}`);
+    const window = windowList.find(w => w.handle === handle);
+    if (window) {
+        newOrder.push(window);
+        log(`  Ajouté: ${window.character_name}`);
+    } else {
+        logError(`  Fenêtre non trouvée pour handle ${handle}`);
     }
+
+    // Update index display
+    const indexElement = item.querySelector('.window-index');
+    if (indexElement) {
+        indexElement.textContent = index + 1;
+    }
+});
+
+windowList = newOrder;
+log('Nouvel ordre des fenêtres:', windowList.map(w => w.character_name));
+
+// Send order to backend
+const characterNames = newOrder.map(w => w.character_name);
+log('Envoi au backend:', characterNames);
+
+try {
+    const result = await invoke('update_window_order', { order: characterNames });
+    log('Backend response:', result);
+    updateStatusText('Ordre des fenêtres mis à jour');
+} catch (error) {
+    logError('Échec de la mise à jour de l\'ordre:', error);
+    alert(`Erreur lors de la mise à jour de l'ordre: ${error}`);
+}
 }
 
 // Setup default hotkeys
@@ -741,7 +752,7 @@ try {
     log('Configuration personnalisée à envoyer:', customHotkeys);
 
     // Envoyer la configuration personnalisée au backend
-    await invoke('setup_custom_hotkeys', { hotkeys: customHotkeys, app_handle: {} });
+    await invoke('setup_custom_hotkeys', { hotkeys: customHotkeys });
 
     log('✓ Raccourcis mis à jour avec succès !');
     updateStatusText('Raccourcis mis à jour avec succès ✓');
