@@ -412,11 +412,7 @@ function handleGlobalMouseMove(e) {
         scrollContainer.scrollTop += scrollSpeed;
     }
 
-    // Allow normal scrolling but prevent other browser behaviors
-    if (e.target.closest('.window-list-container')) {
-        // Allow scrolling in the container
-        return;
-    }
+    // Prevent default to avoid browser behaviors
     e.preventDefault();
 
     // Clear previous drop indicators
@@ -438,37 +434,25 @@ function handleGlobalMouseMove(e) {
             afterElement.classList.add('drop-after');
         }
 
-        // Only reorder if the position actually changes
-        const currentIndex = Array.from(container.children).indexOf(currentDraggedItem);
-        let newIndex;
-
-        if (!afterElement) {
-            // Drop at the end
-            newIndex = container.children.length - 1;
-        } else if (position === 'before') {
-            newIndex = Array.from(container.children).indexOf(afterElement);
-        } else {
-            newIndex = Array.from(container.children).indexOf(afterElement) + 1;
-        }
-
-        // Adjust index if dragged item is before the target
-        if (currentIndex < newIndex) {
-            newIndex--;
-        }
-
-        if (newIndex !== currentIndex && newIndex >= 0) {
-            if (!afterElement || position === 'after') {
-                // Insert at the end or after the element
-                const nextElement = afterElement ? afterElement.nextSibling : null;
-                if (nextElement) {
-                    container.insertBefore(currentDraggedItem, nextElement);
-                } else {
-                    container.appendChild(currentDraggedItem);
+        // Actually move the element in the DOM
+        if (afterElement) {
+            if (position === 'before') {
+                // Insert before the target element
+                if (afterElement !== currentDraggedItem && afterElement.previousSibling !== currentDraggedItem) {
+                    container.insertBefore(currentDraggedItem, afterElement);
                 }
             } else {
-                // Insert before the element
-                container.insertBefore(currentDraggedItem, afterElement);
+                // Insert after the target element
+                const nextElement = afterElement.nextSibling;
+                if (nextElement && nextElement !== currentDraggedItem) {
+                    container.insertBefore(currentDraggedItem, nextElement);
+                } else if (!nextElement) {
+                    container.appendChild(currentDraggedItem);
+                }
             }
+        } else {
+            // Drop at the end
+            container.appendChild(currentDraggedItem);
         }
     }
 }
