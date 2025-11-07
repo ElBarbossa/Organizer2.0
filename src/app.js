@@ -315,13 +315,17 @@ function handleGlobalMouseMove(e) {
 
     // Auto-scroll when dragging near edges
     const containerRect = scrollContainer.getBoundingClientRect();
-    const scrollThreshold = 50; // pixels from edge to start scrolling
-    const scrollSpeed = 10; // pixels per frame
+    const scrollThreshold = 30; // pixels from edge to start scrolling
+    const scrollSpeed = 15; // pixels per frame
+
+    console.log('[AUTO-SCROLL] Mouse Y:', e.clientY, 'Container top:', containerRect.top, 'Container bottom:', containerRect.bottom);
 
     if (e.clientY < containerRect.top + scrollThreshold) {
+        console.log('[AUTO-SCROLL] Scrolling UP');
         // Scroll up
         scrollContainer.scrollTop -= scrollSpeed;
     } else if (e.clientY > containerRect.bottom - scrollThreshold) {
+        console.log('[AUTO-SCROLL] Scrolling DOWN');
         // Scroll down
         scrollContainer.scrollTop += scrollSpeed;
     }
