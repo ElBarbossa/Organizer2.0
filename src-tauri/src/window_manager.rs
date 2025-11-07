@@ -10,8 +10,8 @@ use windows::Win32::System::Threading::PROCESS_QUERY_LIMITED_INFORMATION;
 use windows::Win32::System::Memory::{VirtualAllocEx, VirtualFreeEx, MEM_COMMIT, MEM_RELEASE, PAGE_READWRITE};
 use windows::Win32::UI::WindowsAndMessaging::{
     EnumWindows, GetClassNameW, GetWindowTextW, GetWindowThreadProcessId, IsWindowVisible,
-    SetForegroundWindow, ShowWindow, SW_MINIMIZE, SW_RESTORE, SetWindowPos, SWP_NOMOVE, SWP_NOSIZE, HWND_BOTTOM,
-    FindWindowW, FindWindowExW, SendMessageW,
+    SetForegroundWindow, ShowWindow, SW_MINIMIZE, SW_RESTORE, SetWindowPos, SWP_NOMOVE, SWP_NOSIZE,
+    HWND_BOTTOM, HWND_TOP, FindWindowW, FindWindowExW, SendMessageW,
 };
 
 // Toolbar messages
@@ -220,10 +220,10 @@ unsafe fn find_taskbar_toolbar() -> Option<HWND> {
 }
 
 /// Update window Z-order based on character names order
-/// Attempts multiple techniques to reorder taskbar buttons
+/// Uses SetWindowPos with hWndInsertAfter to chain windows in the desired order
 pub fn reorder_taskbar_windows(order: Vec<String>) -> Result<()> {
-    println!("DEBUG: Starting taskbar window reordering for {} windows", order.len());
     println!("DEBUG: ========================================");
+    println!("DEBUG: Starting taskbar window reordering for {} windows", order.len());
 
     if order.is_empty() {
         println!("DEBUG: No windows to reorder");
@@ -261,56 +261,61 @@ pub fn reorder_taskbar_windows(order: Vec<String>) -> Result<()> {
 
     println!("DEBUG: Found {} windows to reorder", ordered_handles.len());
     println!("DEBUG: Desired order: {:?}", order);
+    println!("DEBUG: ========================================");
 
     unsafe {
-        // Try to find taskbar toolbar (Windows 10 only)
-        if let Some(toolbar) = find_taskbar_toolbar() {
-            println!("DEBUG: Taskbar toolbar found - attempting direct manipulation (Windows 10)");
+        // METHOD: Use SetWindowPos with hWndInsertAfter to chain windows
+        // This creates a sequence where each window is positioned after the previous one
+        println!("DEBUG: Using SetWindowPos with hWndInsertAfter to chain windows in Z-order");
 
-            let button_count = SendMessageW(toolbar, TB_BUTTONCOUNT, WPARAM(0), LPARAM(0));
-            println!("DEBUG: Taskbar has {} buttons", button_count);
-
-            // Note: Full TB_MOVEBUTTON implementation requires cross-process memory access
-            // which is complex. For now, we'll fall back to the window manipulation method.
-            println!("DEBUG: TB_MOVEBUTTON requires complex cross-process memory access");
-            println!("DEBUG: Falling back to window manipulation method...");
-        } else {
-            println!("DEBUG: Taskbar toolbar NOT found - likely Windows 11 or access denied");
-            println!("DEBUG: Using window manipulation method instead...");
-        }
-
-        // Approach: Close and reopen windows in the desired order
-        // This is more reliable than minimize/restore
-        println!("DEBUG: ========================================");
-        println!("DEBUG: METHOD: Minimize all, then restore in CORRECT order");
-        println!("DEBUG: Step 1 - Minimizing all windows");
-
-        for (name, handle) in &ordered_handles {
-            let hwnd = HWND(*handle);
-            ShowWindow(hwnd, SW_MINIMIZE);
-            println!("DEBUG: Minimized: {}", name);
-        }
-
-        // Wait for all windows to minimize
-        std::thread::sleep(std::time::Duration::from_millis(300));
-
-        // Restore windows in CORRECT order (first to last)
-        // This time we restore in the correct order and focus each one
-        println!("DEBUG: Step 2 - Restoring windows in CORRECT order (with focus)");
+        let mut previous_hwnd: Option<HWND> = None;
 
         for (index, (name, handle)) in ordered_handles.iter().enumerate() {
             let hwnd = HWND(*handle);
 
-            // Restore the window
-            ShowWindow(hwnd, SW_RESTORE);
+            // For the first window, use HWND_TOP (or HWND(0))
+            // For subsequent windows, use the previous window's handle
+            let hwnd_insert_after = previous_hwnd.unwrap_or(HWND_TOP);
 
-            // Focus it to ensure it's activated
+            println!(
+                "DEBUG: Positioning window ({}/{}): {} after {:?}",
+                index + 1,
+                ordered_handles.len(),
+                name,
+                hwnd_insert_after
+            );
+
+            // SetWindowPos with SWP_NOMOVE | SWP_NOSIZE to only change Z-order
+            // This should update the taskbar order as well
+            let result = SetWindowPos(
+                hwnd,
+                hwnd_insert_after,
+                0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE,
+            );
+
+            if result.is_err() {
+                println!("DEBUG: Failed to position window {}: {:?}", name, result.err());
+            } else {
+                println!("DEBUG: Successfully positioned window {}", name);
+            }
+
+            // Update previous_hwnd for the next iteration
+            previous_hwnd = Some(hwnd);
+
+            // Small delay to ensure Windows processes the change
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+
+        // After positioning all windows, do a final focus pass to reinforce the order
+        println!("DEBUG: ========================================");
+        println!("DEBUG: Final focus pass to reinforce window order");
+
+        for (index, (name, handle)) in ordered_handles.iter().enumerate() {
+            let hwnd = HWND(*handle);
             SetForegroundWindow(hwnd);
-
-            println!("DEBUG: Restored & focused ({}/{}): {}", index + 1, ordered_handles.len(), name);
-
-            // Longer delay to ensure Windows updates taskbar order
-            std::thread::sleep(std::time::Duration::from_millis(150));
+            println!("DEBUG: Focused ({}/{}): {}", index + 1, ordered_handles.len(), name);
+            std::thread::sleep(std::time::Duration::from_millis(100));
         }
     }
 
