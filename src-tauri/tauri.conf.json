@@ -1,0 +1,60 @@
+{
+  "build": {
+    "beforeDevCommand": "",
+    "beforeBuildCommand": "",
+    "devPath": "../src",
+    "distDir": "../src",
+    "withGlobalTauri": true
+  },
+  "package": {
+    "productName": "Organizer 2.0",
+    "version": "1.0.0"
+  },
+  "tauri": {
+    "systemTray": {
+        "iconPath": "icons/icon.ico",
+        "iconAsTemplate": true
+    },
+    "allowlist": {
+      "all": false,
+      "shell": {
+        "all": false,
+        "open": true
+      },
+      "dialog": {
+        "all": true
+      },
+      "window": {
+        "all": false,
+        "close": true,
+        "hide": true,
+        "show": true,
+        "maximize": true,
+        "minimize": true,
+        "unmaximize": true,
+        "unminimize": true,
+        "startDragging": true,
+        "set-focus": true
+      }
+    },
+    "bundle": {
+      "active": false,
+      "targets": "all",
+      "identifier": "com.rustfocus.dofus"
+    },
+    "security": {
+      "csp": null
+    },
+    "windows": [
+      {
+        "fullscreen": false,
+        "resizable": true,
+        "title": "Organizer 2.0 - Dofus Window Organizer",
+        "width": 500,
+        "height": 700,
+        "minWidth": 400,
+        "minHeight": 500
+      }
+    ]
+  }
+}
