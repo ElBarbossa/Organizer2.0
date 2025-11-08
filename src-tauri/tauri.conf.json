@@ -8,7 +8,7 @@
   },
   "package": {
     "productName": "Organizer 2.0",
-    "version": "1.0.0"
+    "version": "1.0.1"
   },
   "tauri": {
     "systemTray": {
@@ -38,9 +38,13 @@
       }
     },
     "bundle": {
-      "active": false,
+      "active": true,
       "targets": "all",
-      "identifier": "com.rustfocus.dofus"
+      "identifier": "com.rustfocus.dofus",
+      "icon": [
+        "icons/icon.ico",
+        "icons/icon.png"
+      ]
     },
     "security": {
       "csp": null
