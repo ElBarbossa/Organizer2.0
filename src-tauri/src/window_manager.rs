@@ -16,6 +16,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP,
     KEYBD_EVENT_FLAGS, VIRTUAL_KEY, VK_SPACE, VK_CONTROL, VK_V,
+    KEYEVENTF_SCANCODE, MapVirtualKeyW, MAPVK_VK_TO_VSC,
 };
 use windows::Win32::System::Threading::{
     AttachThreadInput, GetCurrentThreadId,
@@ -261,19 +262,25 @@ pub fn reorder_taskbar_windows(order: Vec<String>) -> Result<()> {
     Ok(())
 }
 
-/// Helper function to create a keyboard input event
+/// Helper function to create a keyboard input event with scan code
+/// Using scan codes makes the input more "realistic" for games like Dofus
 fn create_key_input(vk: VIRTUAL_KEY, flags: KEYBD_EVENT_FLAGS) -> INPUT {
-    INPUT {
-        r#type: INPUT_KEYBOARD,
-        Anonymous: INPUT_0 {
-            ki: KEYBDINPUT {
-                wVk: vk,
-                wScan: 0,
-                dwFlags: flags,
-                time: 0,
-                dwExtraInfo: 0,
+    unsafe {
+        // Get the scan code from the virtual key
+        let scan_code = MapVirtualKeyW(vk.0 as u32, MAPVK_VK_TO_VSC) as u16;
+
+        INPUT {
+            r#type: INPUT_KEYBOARD,
+            Anonymous: INPUT_0 {
+                ki: KEYBDINPUT {
+                    wVk: vk,
+                    wScan: scan_code,
+                    dwFlags: flags,
+                    time: 0,
+                    dwExtraInfo: 0,
+                },
             },
-        },
+        }
     }
 }
 
@@ -310,8 +317,11 @@ pub fn send_space_paste_to_window(handle: isize) -> Result<()> {
             println!("WARNING: Window still not in foreground. FG: {}, Target: {}", fg_hwnd.0, handle);
         }
 
-        // Envoi de la touche Espace
-        println!("DEBUG: Sending SPACE key...");
+        // Envoi de la touche Espace avec scan code
+        println!("DEBUG: Sending SPACE key with scan code...");
+        let space_scan = MapVirtualKeyW(VK_SPACE.0 as u32, MAPVK_VK_TO_VSC);
+        println!("DEBUG: VK_SPACE=0x{:X}, Scan code=0x{:X}", VK_SPACE.0, space_scan);
+
         let space_inputs = [
             create_key_input(VK_SPACE, KEYBD_EVENT_FLAGS(0)), // Appui
             create_key_input(VK_SPACE, KEYEVENTF_KEYUP),      // Relâchement
