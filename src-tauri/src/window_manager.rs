@@ -286,40 +286,45 @@ fn create_key_input(vk: VIRTUAL_KEY, flags: KEYBD_EVENT_FLAGS) -> INPUT {
 
 /// Send a key sequence (Space + Paste + Enter + Enter) to a specific window
 /// Sequence: Space → Ctrl+V → Enter (send command) → Enter (validate popup)
-/// Optionally focuses the window first based on with_focus parameter
+/// If with_focus is false, will restore the previous foreground window after sending
 pub fn send_space_paste_enter_to_window(handle: isize, with_focus: bool) -> Result<()> {
     println!("DEBUG: Sending space + paste + enter + enter sequence to window {} (with_focus: {})", handle, with_focus);
 
     unsafe {
         let hwnd = HWND(handle);
 
-        // Optionally focus the window
-        if with_focus {
-            let fg_hwnd = GetForegroundWindow();
-            if fg_hwnd.0 != handle {
-                println!("DEBUG: Window not in foreground, attempting to focus...");
-
-                let mut target_thread_id = 0u32;
-                GetWindowThreadProcessId(hwnd, Some(&mut target_thread_id));
-                let current_thread_id = GetCurrentThreadId();
-
-                if target_thread_id != 0 && target_thread_id != current_thread_id {
-                    let _ = AttachThreadInput(current_thread_id, target_thread_id, true);
-                    SetForegroundWindow(hwnd);
-                    let _ = AttachThreadInput(current_thread_id, target_thread_id, false);
-                } else {
-                    SetForegroundWindow(hwnd);
-                }
-                std::thread::sleep(std::time::Duration::from_millis(300));
-            }
-
-            // Vérification finale
-            let fg_hwnd = GetForegroundWindow();
-            if fg_hwnd.0 != handle {
-                println!("WARNING: Window still not in foreground. FG: {}, Target: {}", fg_hwnd.0, handle);
-            }
+        // Save the current foreground window if we need to restore it
+        let original_fg_hwnd = if !with_focus {
+            let fg = GetForegroundWindow();
+            println!("DEBUG: Saving original foreground window: {}", fg.0);
+            Some(fg)
         } else {
-            println!("DEBUG: Skipping focus (with_focus=false), sending directly to window");
+            None
+        };
+
+        // Always focus the target window (required for SendInput to work)
+        let fg_hwnd = GetForegroundWindow();
+        if fg_hwnd.0 != handle {
+            println!("DEBUG: Window not in foreground, attempting to focus...");
+
+            let mut target_thread_id = 0u32;
+            GetWindowThreadProcessId(hwnd, Some(&mut target_thread_id));
+            let current_thread_id = GetCurrentThreadId();
+
+            if target_thread_id != 0 && target_thread_id != current_thread_id {
+                let _ = AttachThreadInput(current_thread_id, target_thread_id, true);
+                SetForegroundWindow(hwnd);
+                let _ = AttachThreadInput(current_thread_id, target_thread_id, false);
+            } else {
+                SetForegroundWindow(hwnd);
+            }
+            std::thread::sleep(std::time::Duration::from_millis(300));
+        }
+
+        // Vérification finale
+        let fg_hwnd = GetForegroundWindow();
+        if fg_hwnd.0 != handle {
+            println!("WARNING: Window still not in foreground. FG: {}, Target: {}", fg_hwnd.0, handle);
         }
 
         // Envoi de la touche Espace avec scan code
@@ -416,6 +421,13 @@ pub fn send_space_paste_enter_to_window(handle: isize, with_focus: bool) -> Resu
             return Err(anyhow::anyhow!("Failed to send second enter input. Error: {:?}", error));
         }
         println!("DEBUG: Second Enter sent, {} events processed", sent);
+
+        // Restore original foreground window if needed (for auto-mode)
+        if let Some(original_hwnd) = original_fg_hwnd {
+            println!("DEBUG: Restoring original foreground window: {}", original_hwnd.0);
+            std::thread::sleep(std::time::Duration::from_millis(100)); // Small delay to let sequence complete
+            SetForegroundWindow(original_hwnd);
+        }
 
         println!("DEBUG: Space + paste + enter + enter sequence completed successfully");
     }
