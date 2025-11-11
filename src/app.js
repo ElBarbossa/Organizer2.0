@@ -226,6 +226,20 @@ async function init() {
     setTimeout(() => {
         updateCurrentProfileDisplay(currentProfileName);
     }, 1500);
+
+    // Initialize auto-travel checkbox from localStorage
+    const autoTravelCheckbox = document.getElementById('auto-travel-checkbox');
+    if (autoTravelCheckbox) {
+        const autoTravelEnabled = localStorage.getItem('auto_travel_enabled') === 'true';
+        autoTravelCheckbox.checked = autoTravelEnabled;
+        autoTravelCheckbox.addEventListener('change', toggleAutoTravel);
+
+        // Start monitoring if enabled
+        if (autoTravelEnabled) {
+            toggleAutoTravel();
+        }
+        log('Auto-travel checkbox initialisée:', autoTravelEnabled);
+    }
 }
 
 // Setup tab navigation
@@ -701,8 +715,12 @@ function updateSpacePasteWindowSelect() {
     log('Dropdown space+paste mis à jour avec', windowList.length, 'fenêtres');
 }
 
-// Send space + paste sequence to selected window
-async function sendSpacePaste() {
+// Variables for clipboard monitoring
+let lastClipboardContent = '';
+let clipboardCheckInterval = null;
+
+// Send space + paste + enter sequence to selected window
+async function sendSpacePasteEnter(withFocus) {
     const select = document.getElementById('space-paste-window-select');
     const selectedHandle = select.value;
 
@@ -712,12 +730,15 @@ async function sendSpacePaste() {
     }
 
     try {
-        log('Envoi de la séquence espace+coller à la fenêtre:', selectedHandle);
-        await invoke('send_space_paste', { handle: parseInt(selectedHandle) });
-        log('Séquence espace+coller envoyée avec succès');
+        log('Envoi de la séquence espace+coller+entrée à la fenêtre:', selectedHandle, 'avec focus:', withFocus);
+        await invoke('send_space_paste_enter', {
+            handle: parseInt(selectedHandle),
+            withFocus: withFocus
+        });
+        log('Séquence espace+coller+entrée envoyée avec succès');
 
         // Show success feedback
-        const btn = document.getElementById('send-space-paste-btn');
+        const btn = withFocus ? document.getElementById('send-space-paste-btn') : document.getElementById('send-space-paste-test-btn');
         const originalText = btn.textContent;
         btn.textContent = '✅ Envoyé !';
         btn.disabled = true;
@@ -729,6 +750,59 @@ async function sendSpacePaste() {
     } catch (error) {
         logError('Erreur lors de l\'envoi de la séquence:', error);
         alert(`Erreur: ${error}`);
+    }
+}
+
+// Check clipboard for /travel and auto-send
+async function checkClipboardForTravel() {
+    try {
+        const clipboardText = await navigator.clipboard.readText();
+
+        // Check if clipboard changed and contains /travel
+        if (clipboardText !== lastClipboardContent && clipboardText.includes('/travel')) {
+            log('Détection de /travel dans le presse-papier:', clipboardText);
+            lastClipboardContent = clipboardText;
+
+            // Get selected window
+            const select = document.getElementById('space-paste-window-select');
+            const selectedHandle = select.value;
+
+            if (selectedHandle) {
+                log('Envoi automatique de la séquence pour /travel');
+                await invoke('send_space_paste_enter', {
+                    handle: parseInt(selectedHandle),
+                    withFocus: false  // Don't focus for auto-send
+                });
+                log('Séquence /travel envoyée automatiquement');
+            } else {
+                log('Aucune fenêtre sélectionnée pour l\'envoi automatique');
+            }
+        } else if (clipboardText !== lastClipboardContent) {
+            // Update last content even if it doesn't contain /travel
+            lastClipboardContent = clipboardText;
+        }
+    } catch (error) {
+        // Ignore clipboard access errors (happens when not focused)
+        // logError('Erreur lors de la lecture du presse-papier:', error);
+    }
+}
+
+// Toggle auto-travel monitoring
+function toggleAutoTravel() {
+    const checkbox = document.getElementById('auto-travel-checkbox');
+
+    if (checkbox.checked) {
+        log('Activation de la surveillance du presse-papier pour /travel');
+        // Check clipboard every 500ms
+        clipboardCheckInterval = setInterval(checkClipboardForTravel, 500);
+        localStorage.setItem('auto_travel_enabled', 'true');
+    } else {
+        log('Désactivation de la surveillance du presse-papier');
+        if (clipboardCheckInterval) {
+            clearInterval(clipboardCheckInterval);
+            clipboardCheckInterval = null;
+        }
+        localStorage.setItem('auto_travel_enabled', 'false');
     }
 }
 

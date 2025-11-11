@@ -428,11 +428,11 @@ fn show_window(app_handle: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// Send space + paste key sequence to a specific window
+/// Send space + paste + enter key sequence to a specific window
 #[tauri::command]
-fn send_space_paste(handle: isize) -> Result<(), String> {
-    window_manager::send_space_paste_to_window(handle)
-        .map_err(|e| format!("Failed to send space + paste: {}", e))
+fn send_space_paste_enter(handle: isize, with_focus: bool) -> Result<(), String> {
+    window_manager::send_space_paste_enter_to_window(handle, with_focus)
+        .map_err(|e| format!("Failed to send space + paste + enter: {}", e))
 }
 
 fn main() {
@@ -487,7 +487,7 @@ fn main() {
             list_profiles,
             delete_profile,
             show_window,
-            send_space_paste,
+            send_space_paste_enter,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
