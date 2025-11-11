@@ -11,16 +11,16 @@ use windows::Win32::UI::WindowsAndMessaging::{
     EnumWindows, GetClassNameW, GetWindowTextW, GetWindowThreadProcessId, IsWindowVisible,
     SetForegroundWindow, SetWindowPos, SWP_NOMOVE, SWP_NOSIZE,
     HWND_TOP, AllowSetForegroundWindow, ShowWindow, SW_HIDE, SW_SHOW,
-    PostMessageW, WM_KEYDOWN, WM_KEYUP, GetForegroundWindow,
+    GetForegroundWindow,
 };
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP,
-    VK_SPACE, VK_CONTROL, VK_V,
+    KEYBD_EVENT_FLAGS, VIRTUAL_KEY, VK_SPACE, VK_CONTROL, VK_V,
 };
 use windows::Win32::System::Threading::{
     AttachThreadInput, GetCurrentThreadId,
 };
-use windows::Win32::Foundation::WPARAM;
+use windows::Win32::Foundation::GetLastError;
 
 // Note: Toolbar messages kept for future reference if needed
 // const TB_BUTTONCOUNT: u32 = 0x0418;
@@ -261,6 +261,22 @@ pub fn reorder_taskbar_windows(order: Vec<String>) -> Result<()> {
     Ok(())
 }
 
+/// Helper function to create a keyboard input event
+fn create_key_input(vk: VIRTUAL_KEY, flags: KEYBD_EVENT_FLAGS) -> INPUT {
+    INPUT {
+        r#type: INPUT_KEYBOARD,
+        Anonymous: INPUT_0 {
+            ki: KEYBDINPUT {
+                wVk: vk,
+                wScan: 0,
+                dwFlags: flags,
+                time: 0,
+                dwExtraInfo: 0,
+            },
+        },
+    }
+}
+
 /// Send a key sequence (Space + Paste) to a specific window
 /// First focuses the window, then sends Space key, then Ctrl+V (paste)
 pub fn send_space_paste_to_window(handle: isize) -> Result<()> {
@@ -269,17 +285,11 @@ pub fn send_space_paste_to_window(handle: isize) -> Result<()> {
     unsafe {
         let hwnd = HWND(handle);
 
-        // First, focus the window
-        focus_window(handle)?;
-
-        // Wait for the window to be fully focused
-        std::thread::sleep(std::time::Duration::from_millis(300));
-
-        // Verify the window is now in foreground
+        // Mise au premier plan de la fenêtre
         let fg_hwnd = GetForegroundWindow();
         if fg_hwnd.0 != handle {
-            println!("WARNING: Window not in foreground after focus attempt. FG: {}, Target: {}", fg_hwnd.0, handle);
-            // Try to attach thread input to force focus
+            println!("DEBUG: Window not in foreground, attempting to focus...");
+
             let mut target_thread_id = 0u32;
             GetWindowThreadProcessId(hwnd, Some(&mut target_thread_id));
             let current_thread_id = GetCurrentThreadId();
@@ -288,77 +298,78 @@ pub fn send_space_paste_to_window(handle: isize) -> Result<()> {
                 let _ = AttachThreadInput(current_thread_id, target_thread_id, true);
                 SetForegroundWindow(hwnd);
                 let _ = AttachThreadInput(current_thread_id, target_thread_id, false);
-                std::thread::sleep(std::time::Duration::from_millis(300));
+            } else {
+                SetForegroundWindow(hwnd);
             }
+            std::thread::sleep(std::time::Duration::from_millis(300));
         }
 
-        println!("DEBUG: Window focused, sending key sequence with SendInput...");
+        // Vérification finale
+        let fg_hwnd = GetForegroundWindow();
+        if fg_hwnd.0 != handle {
+            println!("WARNING: Window still not in foreground. FG: {}, Target: {}", fg_hwnd.0, handle);
+        }
 
-        let mut inputs: Vec<INPUT> = Vec::new();
-
-        // Send Space key
+        // Envoi de la touche Espace
         println!("DEBUG: Sending SPACE key...");
-        inputs.push(create_key_input(VK_SPACE.0 as u16, false));
-        inputs.push(create_key_input(VK_SPACE.0 as u16, true));
-        let sent = SendInput(&inputs, std::mem::size_of::<INPUT>() as i32);
-        println!("DEBUG: Space sent, {} events processed", sent);
-        inputs.clear();
+        let space_inputs = [
+            create_key_input(VK_SPACE, KEYBD_EVENT_FLAGS(0)), // Appui
+            create_key_input(VK_SPACE, KEYEVENTF_KEYUP),      // Relâchement
+        ];
 
-        // Wait between space and paste
+        let sent = SendInput(&space_inputs, std::mem::size_of::<INPUT>() as i32);
+        if sent == 0 {
+            let error = GetLastError();
+            println!("ERROR: Failed to send space input. Error code: {:?}", error);
+            return Err(anyhow::anyhow!("Failed to send space input. Error: {:?}", error));
+        }
+        println!("DEBUG: Space sent, {} events processed", sent);
+
         std::thread::sleep(std::time::Duration::from_millis(150));
 
-        // Send Ctrl+V (paste) - maintain Ctrl pressed while V is pressed
-        println!("DEBUG: Sending CTRL+V (paste)...");
+        // Envoi de Ctrl+V avec délais individuels pour garantir la détection
+        println!("DEBUG: Sending CTRL+V (paste) with individual delays...");
 
         // Press Ctrl
-        inputs.push(create_key_input(VK_CONTROL.0 as u16, false));
-        SendInput(&inputs, std::mem::size_of::<INPUT>() as i32);
-        inputs.clear();
-
-        // Small delay to ensure Ctrl is registered
+        let sent = SendInput(&[create_key_input(VK_CONTROL, KEYBD_EVENT_FLAGS(0))], std::mem::size_of::<INPUT>() as i32);
+        if sent == 0 {
+            let error = GetLastError();
+            println!("ERROR: Failed to send Ctrl down. Error code: {:?}", error);
+            return Err(anyhow::anyhow!("Failed to send Ctrl down. Error: {:?}", error));
+        }
         std::thread::sleep(std::time::Duration::from_millis(50));
 
         // Press V (while Ctrl is held)
-        inputs.push(create_key_input(VK_V.0 as u16, false));
-        SendInput(&inputs, std::mem::size_of::<INPUT>() as i32);
-        inputs.clear();
-
-        // Small delay before releasing
+        let sent = SendInput(&[create_key_input(VK_V, KEYBD_EVENT_FLAGS(0))], std::mem::size_of::<INPUT>() as i32);
+        if sent == 0 {
+            let error = GetLastError();
+            println!("ERROR: Failed to send V down. Error code: {:?}", error);
+            return Err(anyhow::anyhow!("Failed to send V down. Error: {:?}", error));
+        }
         std::thread::sleep(std::time::Duration::from_millis(50));
 
         // Release V
-        inputs.push(create_key_input(VK_V.0 as u16, true));
-        SendInput(&inputs, std::mem::size_of::<INPUT>() as i32);
-        inputs.clear();
-
-        // Small delay before releasing Ctrl
+        let sent = SendInput(&[create_key_input(VK_V, KEYEVENTF_KEYUP)], std::mem::size_of::<INPUT>() as i32);
+        if sent == 0 {
+            let error = GetLastError();
+            println!("ERROR: Failed to send V up. Error code: {:?}", error);
+            return Err(anyhow::anyhow!("Failed to send V up. Error: {:?}", error));
+        }
         std::thread::sleep(std::time::Duration::from_millis(50));
 
         // Release Ctrl
-        inputs.push(create_key_input(VK_CONTROL.0 as u16, true));
-        let sent = SendInput(&inputs, std::mem::size_of::<INPUT>() as i32);
-        println!("DEBUG: Ctrl+V sent, {} events processed", sent);
+        let sent = SendInput(&[create_key_input(VK_CONTROL, KEYEVENTF_KEYUP)], std::mem::size_of::<INPUT>() as i32);
+        if sent == 0 {
+            let error = GetLastError();
+            println!("ERROR: Failed to send Ctrl up. Error code: {:?}", error);
+            return Err(anyhow::anyhow!("Failed to send Ctrl up. Error: {:?}", error));
+        }
+        println!("DEBUG: Ctrl+V sent successfully with {} total events", 4);
 
-        println!("DEBUG: Space + paste sequence sent successfully");
+        println!("DEBUG: Space + paste sequence completed successfully");
     }
 
     Ok(())
-}
-
-/// Helper function to create a keyboard input event
-unsafe fn create_key_input(vk_code: u16, key_up: bool) -> INPUT {
-    INPUT {
-        r#type: INPUT_KEYBOARD,
-        Anonymous: INPUT_0 {
-            ki: KEYBDINPUT {
-                wVk: windows::Win32::UI::Input::KeyboardAndMouse::VIRTUAL_KEY(vk_code),
-                wScan: 0,
-                dwFlags: if key_up { KEYEVENTF_KEYUP } else { Default::default() },
-                time: 0,
-                dwExtraInfo: 0,
-            },
-        },
-    }
 }
 
 #[cfg(test)]
