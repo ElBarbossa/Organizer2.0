@@ -12,6 +12,10 @@ use windows::Win32::UI::WindowsAndMessaging::{
     SetForegroundWindow, SetWindowPos, SWP_NOMOVE, SWP_NOSIZE,
     HWND_TOP, AllowSetForegroundWindow, ShowWindow, SW_HIDE, SW_SHOW,
 };
+use windows::Win32::UI::Input::KeyboardAndMouse::{
+    SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP,
+    VK_SPACE, VK_CONTROL, VK_V,
+};
 
 // Note: Toolbar messages kept for future reference if needed
 // const TB_BUTTONCOUNT: u32 = 0x0418;
@@ -250,6 +254,64 @@ pub fn reorder_taskbar_windows(order: Vec<String>) -> Result<()> {
     println!("DEBUG: Taskbar window reordering completed");
     println!("DEBUG: Windows should now be ordered in taskbar as: {:?}", order);
     Ok(())
+}
+
+/// Send a key sequence (Space + Paste) to a specific window
+/// First focuses the window, then sends Space key, then Ctrl+V (paste)
+pub fn send_space_paste_to_window(handle: isize) -> Result<()> {
+    println!("DEBUG: Sending space + paste sequence to window {}", handle);
+
+    // First, focus the window
+    focus_window(handle)?;
+
+    // Wait a bit for the window to be fully focused
+    std::thread::sleep(std::time::Duration::from_millis(100));
+
+    unsafe {
+        // Create input events
+        let mut inputs: Vec<INPUT> = Vec::new();
+
+        // Press Space
+        inputs.push(create_key_input(VK_SPACE.0 as u16, false));
+        // Release Space
+        inputs.push(create_key_input(VK_SPACE.0 as u16, true));
+
+        // Small delay between space and paste
+        SendInput(&inputs, std::mem::size_of::<INPUT>() as i32);
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        inputs.clear();
+
+        // Press Ctrl
+        inputs.push(create_key_input(VK_CONTROL.0 as u16, false));
+        // Press V
+        inputs.push(create_key_input(VK_V.0 as u16, false));
+        // Release V
+        inputs.push(create_key_input(VK_V.0 as u16, true));
+        // Release Ctrl
+        inputs.push(create_key_input(VK_CONTROL.0 as u16, true));
+
+        // Send the input
+        SendInput(&inputs, std::mem::size_of::<INPUT>() as i32);
+    }
+
+    println!("DEBUG: Space + paste sequence sent successfully");
+    Ok(())
+}
+
+/// Helper function to create a keyboard input event
+unsafe fn create_key_input(vk_code: u16, key_up: bool) -> INPUT {
+    INPUT {
+        r#type: INPUT_KEYBOARD,
+        Anonymous: INPUT_0 {
+            ki: KEYBDINPUT {
+                wVk: windows::Win32::UI::Input::KeyboardAndMouse::VIRTUAL_KEY(vk_code),
+                wScan: 0,
+                dwFlags: if key_up { KEYEVENTF_KEYUP } else { Default::default() },
+                time: 0,
+                dwExtraInfo: 0,
+            },
+        },
+    }
 }
 
 #[cfg(test)]

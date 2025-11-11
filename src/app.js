@@ -620,6 +620,9 @@ function renderWindowList() {
     // Les event listeners drag sont maintenant gérés individuellement sur chaque élément
 
     log('Liste des fenêtres rendue:', windowList.length, 'éléments');
+
+    // Update space+paste window select dropdown
+    updateSpacePasteWindowSelect();
 }
 
 // Show/Hide Apply Order button
@@ -677,6 +680,56 @@ function moveWindowDown(index) {
 
     // Re-render the list
     renderWindowList();
+}
+
+// Update the window select dropdown for space+paste feature
+function updateSpacePasteWindowSelect() {
+    const select = document.getElementById('space-paste-window-select');
+    if (!select) return;
+
+    // Clear existing options except the first one
+    select.innerHTML = '<option value="">Sélectionnez une fenêtre...</option>';
+
+    // Add an option for each window
+    windowList.forEach((window, index) => {
+        const option = document.createElement('option');
+        option.value = window.handle;
+        option.textContent = `${index + 1}. ${window.character_name}`;
+        select.appendChild(option);
+    });
+
+    log('Dropdown space+paste mis à jour avec', windowList.length, 'fenêtres');
+}
+
+// Send space + paste sequence to selected window
+async function sendSpacePaste() {
+    const select = document.getElementById('space-paste-window-select');
+    const selectedHandle = select.value;
+
+    if (!selectedHandle) {
+        alert('Veuillez sélectionner une fenêtre cible');
+        return;
+    }
+
+    try {
+        log('Envoi de la séquence espace+coller à la fenêtre:', selectedHandle);
+        await invoke('send_space_paste', { handle: parseInt(selectedHandle) });
+        log('Séquence espace+coller envoyée avec succès');
+
+        // Show success feedback
+        const btn = document.getElementById('send-space-paste-btn');
+        const originalText = btn.textContent;
+        btn.textContent = '✅ Envoyé !';
+        btn.disabled = true;
+
+        setTimeout(() => {
+            btn.textContent = originalText;
+            btn.disabled = false;
+        }, 2000);
+    } catch (error) {
+        logError('Erreur lors de l\'envoi de la séquence:', error);
+        alert(`Erreur: ${error}`);
+    }
 }
 
 // Custom Drag and Drop handlers (compatible with Tauri/WebView2)

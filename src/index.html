@@ -148,6 +148,26 @@
                         <button class="btn btn-secondary" onclick="resetHotkeys()">🔄 Réinitialiser par Défaut</button>
                     </div>
 
+                    <!-- Section Séquence de touches -->
+                    <div class="space-paste-section">
+                        <div class="settings-header">
+                            <h2>⌨️ Envoi de Séquence de Touches</h2>
+                            <span class="help-icon" title="Envoie la séquence 'Espace + Coller (Ctrl+V)' à une fenêtre spécifique">💡</span>
+                        </div>
+                        <div class="space-paste-content">
+                            <div class="input-group">
+                                <label for="space-paste-window-select">Fenêtre cible :</label>
+                                <select id="space-paste-window-select" class="input-field">
+                                    <option value="">Sélectionnez une fenêtre...</option>
+                                    <!-- Options will be populated by JavaScript -->
+                                </select>
+                            </div>
+                            <button class="btn btn-primary" onclick="sendSpacePaste()" id="send-space-paste-btn">
+                                📤 Envoyer Espace + Coller
+                            </button>
+                        </div>
+                    </div>
+
                     <!-- Section Mise à jour -->
                     <div class="update-section">
                         <div class="update-info">

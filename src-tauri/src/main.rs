@@ -428,6 +428,13 @@ fn show_window(app_handle: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// Send space + paste key sequence to a specific window
+#[tauri::command]
+fn send_space_paste(handle: isize) -> Result<(), String> {
+    window_manager::send_space_paste_to_window(handle)
+        .map_err(|e| format!("Failed to send space + paste: {}", e))
+}
+
 fn main() {
     // Initialize app state
     let state = AppState::new().expect("Failed to initialize app state");
@@ -480,6 +487,7 @@ fn main() {
             list_profiles,
             delete_profile,
             show_window,
+            send_space_paste,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

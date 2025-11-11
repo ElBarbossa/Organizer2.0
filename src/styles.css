@@ -665,6 +665,46 @@ body {
     padding-top: 10px;
 }
 
+.space-paste-section {
+    background: var(--bg-secondary);
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+    padding: 15px;
+    margin-top: 20px;
+}
+
+.space-paste-content {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    margin-top: 15px;
+}
+
+.space-paste-content .input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.space-paste-content .input-group label {
+    color: var(--text-secondary);
+    font-weight: 500;
+    font-size: 14px;
+}
+
+.space-paste-content .input-field {
+    padding: 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 14px;
+}
+
+.space-paste-content .btn {
+    align-self: flex-start;
+}
+
 .update-section {
     background: var(--bg-secondary);
     border-radius: 10px;
