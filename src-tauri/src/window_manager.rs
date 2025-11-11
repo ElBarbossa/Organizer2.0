@@ -309,7 +309,7 @@ pub fn send_space_paste_enter_to_window(handle: isize, with_focus: bool) -> Resu
             } else {
                 SetForegroundWindow(hwnd);
             }
-            std::thread::sleep(std::time::Duration::from_millis(300));
+            std::thread::sleep(std::time::Duration::from_millis(200));
         }
 
         // Vérification finale
@@ -336,7 +336,7 @@ pub fn send_space_paste_enter_to_window(handle: isize, with_focus: bool) -> Resu
         }
         println!("DEBUG: Space sent, {} events processed", sent);
 
-        std::thread::sleep(std::time::Duration::from_millis(150));
+        std::thread::sleep(std::time::Duration::from_millis(100));
 
         // Envoi de Ctrl+V avec délais individuels pour garantir la détection
         println!("DEBUG: Sending CTRL+V (paste) with individual delays...");
@@ -348,7 +348,7 @@ pub fn send_space_paste_enter_to_window(handle: isize, with_focus: bool) -> Resu
             println!("ERROR: Failed to send Ctrl down. Error code: {:?}", error);
             return Err(anyhow::anyhow!("Failed to send Ctrl down. Error: {:?}", error));
         }
-        std::thread::sleep(std::time::Duration::from_millis(50));
+        std::thread::sleep(std::time::Duration::from_millis(30));
 
         // Press V (while Ctrl is held)
         let sent = SendInput(&[create_key_input(VK_V, KEYBD_EVENT_FLAGS(0))], std::mem::size_of::<INPUT>() as i32);
@@ -357,7 +357,7 @@ pub fn send_space_paste_enter_to_window(handle: isize, with_focus: bool) -> Resu
             println!("ERROR: Failed to send V down. Error code: {:?}", error);
             return Err(anyhow::anyhow!("Failed to send V down. Error: {:?}", error));
         }
-        std::thread::sleep(std::time::Duration::from_millis(50));
+        std::thread::sleep(std::time::Duration::from_millis(30));
 
         // Release V
         let sent = SendInput(&[create_key_input(VK_V, KEYEVENTF_KEYUP)], std::mem::size_of::<INPUT>() as i32);
@@ -366,7 +366,7 @@ pub fn send_space_paste_enter_to_window(handle: isize, with_focus: bool) -> Resu
             println!("ERROR: Failed to send V up. Error code: {:?}", error);
             return Err(anyhow::anyhow!("Failed to send V up. Error: {:?}", error));
         }
-        std::thread::sleep(std::time::Duration::from_millis(50));
+        std::thread::sleep(std::time::Duration::from_millis(30));
 
         // Release Ctrl
         let sent = SendInput(&[create_key_input(VK_CONTROL, KEYEVENTF_KEYUP)], std::mem::size_of::<INPUT>() as i32);
@@ -378,7 +378,7 @@ pub fn send_space_paste_enter_to_window(handle: isize, with_focus: bool) -> Resu
         println!("DEBUG: Ctrl+V sent successfully with {} total events", 4);
 
         // Wait before sending Enter
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        std::thread::sleep(std::time::Duration::from_millis(50));
 
         // Send first Enter key (to send the /travel command)
         println!("DEBUG: Sending first ENTER key (send command)...");
@@ -395,8 +395,8 @@ pub fn send_space_paste_enter_to_window(handle: isize, with_focus: bool) -> Resu
         }
         println!("DEBUG: First Enter sent, {} events processed", sent);
 
-        // Wait longer for popup to appear (increased delay)
-        std::thread::sleep(std::time::Duration::from_millis(500));
+        // Wait for popup to appear
+        std::thread::sleep(std::time::Duration::from_millis(300));
 
         // Send second Enter key (to validate the popup)
         println!("DEBUG: Sending second ENTER key (validate popup)...");

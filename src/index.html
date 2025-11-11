@@ -72,127 +72,120 @@
 
             <!-- Settings Tab -->
             <div class="tab-content" id="settings-tab">
-                <div class="settings-layout">
-                    <!-- Header avec icône d'aide -->
-                    <div class="settings-header">
-                        <h2>⌨️ Configuration des Raccourcis</h2>
-                        <span class="help-icon" title="Configurez vos raccourcis clavier globaux. Cliquez sur 'Configurer' pour personnaliser une touche.">💡</span>
-                    </div>
+                <div class="settings-vertical-layout">
+                    <!-- Section: Configuration Touche -->
+                    <div class="settings-section">
+                        <div class="settings-section-header">
+                            <h2>⌨️ Configuration Touche</h2>
+                            <span class="help-icon" title="Configurez vos raccourcis clavier globaux">💡</span>
+                        </div>
 
-                    <!-- Contenu en deux colonnes -->
-                    <div class="settings-columns">
-                        <!-- Colonne gauche : Navigation Cyclique -->
-                        <div class="settings-card">
-                            <h3>🔄 Navigation Cyclique</h3>
-                            <div class="hotkey-config-row">
-                                <label>Suivante :</label>
-                                <kbd id="hotkey-next">Page Down</kbd>
-                                <button class="btn btn-secondary btn-sm" onclick="configureHotkey('next')">🔧</button>
+                        <div class="settings-columns">
+                            <!-- Colonne gauche : Navigation Cyclique -->
+                            <div class="settings-card">
+                                <h3>🔄 Navigation Cyclique</h3>
+                                <div class="hotkey-config-row">
+                                    <label>Suivante :</label>
+                                    <kbd id="hotkey-next">Page Down</kbd>
+                                    <button class="btn btn-secondary btn-sm" onclick="configureHotkey('next')">🔧</button>
+                                </div>
+                                <div class="hotkey-config-row">
+                                    <label>Précédente :</label>
+                                    <kbd id="hotkey-prev">Page Up</kbd>
+                                    <button class="btn btn-secondary btn-sm" onclick="configureHotkey('prev')">🔧</button>
+                                </div>
                             </div>
-                            <div class="hotkey-config-row">
-                                <label>Précédente :</label>
-                                <kbd id="hotkey-prev">Page Up</kbd>
-                                <button class="btn btn-secondary btn-sm" onclick="configureHotkey('prev')">🔧</button>
+
+                            <!-- Colonne droite : Accès Direct -->
+                            <div class="settings-card">
+                                <h3>🎯 Accès Direct</h3>
+                                <div class="hotkey-config-row">
+                                    <label>Fenêtre #1 :</label>
+                                    <kbd id="hotkey-f1">F1</kbd>
+                                    <button class="btn btn-secondary btn-sm" onclick="configureHotkey('f1')">🔧</button>
+                                </div>
+                                <div class="hotkey-config-row">
+                                    <label>Fenêtre #2 :</label>
+                                    <kbd id="hotkey-f2">F2</kbd>
+                                    <button class="btn btn-secondary btn-sm" onclick="configureHotkey('f2')">🔧</button>
+                                </div>
+                                <div class="hotkey-config-row">
+                                    <label>Fenêtre #3 :</label>
+                                    <kbd id="hotkey-f3">F3</kbd>
+                                    <button class="btn btn-secondary btn-sm" onclick="configureHotkey('f3')">🔧</button>
+                                </div>
+                                <div class="hotkey-config-row">
+                                    <label>Fenêtre #4 :</label>
+                                    <kbd id="hotkey-f4">F4</kbd>
+                                    <button class="btn btn-secondary btn-sm" onclick="configureHotkey('f4')">🔧</button>
+                                </div>
+                                <div class="hotkey-config-row">
+                                    <label>Fenêtre #5 :</label>
+                                    <kbd id="hotkey-f5">F5</kbd>
+                                    <button class="btn btn-secondary btn-sm" onclick="configureHotkey('f5')">🔧</button>
+                                </div>
+                                <div class="hotkey-config-row">
+                                    <label>Fenêtre #6 :</label>
+                                    <kbd id="hotkey-f6">F6</kbd>
+                                    <button class="btn btn-secondary btn-sm" onclick="configureHotkey('f6')">🔧</button>
+                                </div>
+                                <div class="hotkey-config-row">
+                                    <label>Fenêtre #7 :</label>
+                                    <kbd id="hotkey-f7">F7</kbd>
+                                    <button class="btn btn-secondary btn-sm" onclick="configureHotkey('f7')">🔧</button>
+                                </div>
+                                <div class="hotkey-config-row">
+                                    <label>Fenêtre #8 :</label>
+                                    <kbd id="hotkey-f8">F8</kbd>
+                                    <button class="btn btn-secondary btn-sm" onclick="configureHotkey('f8')">🔧</button>
+                                </div>
                             </div>
                         </div>
 
-                        <!-- Colonne droite : Accès Direct -->
-                        <div class="settings-card">
-                            <h3>🎯 Accès Direct</h3>
-                            <div class="hotkey-config-row">
-                                <label>Fenêtre #1 :</label>
-                                <kbd id="hotkey-f1">F1</kbd>
-                                <button class="btn btn-secondary btn-sm" onclick="configureHotkey('f1')">🔧</button>
-                            </div>
-                            <div class="hotkey-config-row">
-                                <label>Fenêtre #2 :</label>
-                                <kbd id="hotkey-f2">F2</kbd>
-                                <button class="btn btn-secondary btn-sm" onclick="configureHotkey('f2')">🔧</button>
-                            </div>
-                            <div class="hotkey-config-row">
-                                <label>Fenêtre #3 :</label>
-                                <kbd id="hotkey-f3">F3</kbd>
-                                <button class="btn btn-secondary btn-sm" onclick="configureHotkey('f3')">🔧</button>
-                            </div>
-                            <div class="hotkey-config-row">
-                                <label>Fenêtre #4 :</label>
-                                <kbd id="hotkey-f4">F4</kbd>
-                                <button class="btn btn-secondary btn-sm" onclick="configureHotkey('f4')">🔧</button>
-                            </div>
-                            <div class="hotkey-config-row">
-                                <label>Fenêtre #5 :</label>
-                                <kbd id="hotkey-f5">F5</kbd>
-                                <button class="btn btn-secondary btn-sm" onclick="configureHotkey('f5')">🔧</button>
-                            </div>
-                            <div class="hotkey-config-row">
-                                <label>Fenêtre #6 :</label>
-                                <kbd id="hotkey-f6">F6</kbd>
-                                <button class="btn btn-secondary btn-sm" onclick="configureHotkey('f6')">🔧</button>
-                            </div>
-                            <div class="hotkey-config-row">
-                                <label>Fenêtre #7 :</label>
-                                <kbd id="hotkey-f7">F7</kbd>
-                                <button class="btn btn-secondary btn-sm" onclick="configureHotkey('f7')">🔧</button>
-                            </div>
-                            <div class="hotkey-config-row">
-                                <label>Fenêtre #8 :</label>
-                                <kbd id="hotkey-f8">F8</kbd>
-                                <button class="btn btn-secondary btn-sm" onclick="configureHotkey('f8')">🔧</button>
-                            </div>
+                        <div class="settings-actions">
+                            <button class="btn btn-primary" onclick="applyHotkeys()" id="apply-hotkeys-btn">💾 Appliquer</button>
+                            <button class="btn btn-secondary" onclick="resetHotkeys()">🔄 Réinitialiser</button>
                         </div>
                     </div>
 
-                    <!-- Boutons d'action -->
-                    <div class="settings-actions">
-                        <button class="btn btn-primary" onclick="applyHotkeys()" id="apply-hotkeys-btn">💾 Appliquer les Changements</button>
-                        <button class="btn btn-secondary" onclick="resetHotkeys()">🔄 Réinitialiser par Défaut</button>
-                    </div>
-
-                    <!-- Section Séquence de touches -->
-                    <div class="space-paste-section">
-                        <div class="settings-header">
-                            <h2>⌨️ Envoi de Séquence de Touches</h2>
-                            <span class="help-icon" title="Envoie la séquence 'Espace + Coller (Ctrl+V) + Entrée + Entrée' à une fenêtre spécifique (le second Entrée valide la popup)">💡</span>
+                    <!-- Section: Fonctions avancées -->
+                    <div class="settings-section">
+                        <div class="settings-section-header">
+                            <h2>🚀 Fonctions avancées</h2>
+                            <span class="help-icon" title="Fonctionnalités avancées pour automatiser certaines actions">💡</span>
                         </div>
-                        <div class="space-paste-content">
+
+                        <div class="advanced-function">
+                            <h3>🗺️ Travel automatique</h3>
                             <div class="input-group">
                                 <label for="space-paste-window-select">Fenêtre cible :</label>
                                 <select id="space-paste-window-select" class="input-field">
                                     <option value="">Sélectionnez une fenêtre...</option>
-                                    <!-- Options will be populated by JavaScript -->
                                 </select>
                             </div>
 
                             <div class="input-group">
                                 <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
                                     <input type="checkbox" id="auto-travel-checkbox" style="width: auto; cursor: pointer;">
-                                    <span>🚀 Activation automatique pour "/travel"</span>
+                                    <span>Activation automatique</span>
                                 </label>
                                 <small style="color: var(--text-secondary); margin-top: 5px;">
-                                    Détecte automatiquement "/travel" dans le presse-papier et envoie la séquence à la fenêtre sélectionnée.
+                                    Détecte "/travel" dans le presse-papier et envoie automatiquement la séquence (Espace + Coller + Entrée + Entrée) à la fenêtre sélectionnée.
                                 </small>
                             </div>
+                        </div>
 
-                            <div class="button-group" style="display: flex; gap: 10px;">
-                                <button class="btn btn-primary" onclick="sendSpacePasteEnter(true)" id="send-space-paste-btn">
-                                    📤 Envoyer avec Focus
-                                </button>
-                                <button class="btn btn-secondary" onclick="sendSpacePasteEnter(false)" id="send-space-paste-test-btn">
-                                    🧪 Test sans Focus
+                        <!-- Section Mise à jour -->
+                        <div class="update-section">
+                            <h3>📦 Mise à jour</h3>
+                            <div class="update-info">
+                                <span class="version-text">Version actuelle : <strong id="current-version">...</strong></span>
+                                <button class="btn btn-secondary btn-sm" onclick="checkForUpdates()" id="check-update-btn">
+                                    🔄 Vérifier
                                 </button>
                             </div>
+                            <div id="update-status" class="update-status"></div>
                         </div>
-                    </div>
-
-                    <!-- Section Mise à jour -->
-                    <div class="update-section">
-                        <div class="update-info">
-                            <span class="version-text">Version actuelle : <strong id="current-version">...</strong></span>
-                            <button class="btn btn-secondary btn-sm" onclick="checkForUpdates()" id="check-update-btn">
-                                🔄 Vérifier les mises à jour
-                            </button>
-                        </div>
-                        <div id="update-status" class="update-status"></div>
                     </div>
                 </div>
             </div>
