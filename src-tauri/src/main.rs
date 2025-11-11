@@ -428,11 +428,12 @@ fn show_window(app_handle: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// Send space + paste + enter key sequence to a specific window
+/// Send space + paste + enter + enter key sequence to a specific window
+/// Sequence: Space → Ctrl+V → Enter (send command) → Enter (validate popup)
 #[tauri::command]
 fn send_space_paste_enter(handle: isize, with_focus: bool) -> Result<(), String> {
     window_manager::send_space_paste_enter_to_window(handle, with_focus)
-        .map_err(|e| format!("Failed to send space + paste + enter: {}", e))
+        .map_err(|e| format!("Failed to send space + paste + enter + enter: {}", e))
 }
 
 fn main() {

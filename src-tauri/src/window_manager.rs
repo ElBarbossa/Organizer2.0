@@ -284,10 +284,11 @@ fn create_key_input(vk: VIRTUAL_KEY, flags: KEYBD_EVENT_FLAGS) -> INPUT {
     }
 }
 
-/// Send a key sequence (Space + Paste + Enter) to a specific window
+/// Send a key sequence (Space + Paste + Enter + Enter) to a specific window
+/// Sequence: Space → Ctrl+V → Enter (send command) → Enter (validate popup)
 /// Optionally focuses the window first based on with_focus parameter
 pub fn send_space_paste_enter_to_window(handle: isize, with_focus: bool) -> Result<()> {
-    println!("DEBUG: Sending space + paste + enter sequence to window {} (with_focus: {})", handle, with_focus);
+    println!("DEBUG: Sending space + paste + enter + enter sequence to window {} (with_focus: {})", handle, with_focus);
 
     unsafe {
         let hwnd = HWND(handle);
@@ -383,8 +384,8 @@ pub fn send_space_paste_enter_to_window(handle: isize, with_focus: bool) -> Resu
         // Wait before sending Enter
         std::thread::sleep(std::time::Duration::from_millis(100));
 
-        // Send Enter key
-        println!("DEBUG: Sending ENTER key...");
+        // Send first Enter key (to send the /travel command)
+        println!("DEBUG: Sending first ENTER key (send command)...");
         let enter_inputs = [
             create_key_input(VK_RETURN, KEYBD_EVENT_FLAGS(0)), // Appui
             create_key_input(VK_RETURN, KEYEVENTF_KEYUP),      // Relâchement
@@ -393,12 +394,30 @@ pub fn send_space_paste_enter_to_window(handle: isize, with_focus: bool) -> Resu
         let sent = SendInput(&enter_inputs, std::mem::size_of::<INPUT>() as i32);
         if sent == 0 {
             let error = GetLastError();
-            println!("ERROR: Failed to send enter input. Error code: {:?}", error);
-            return Err(anyhow::anyhow!("Failed to send enter input. Error: {:?}", error));
+            println!("ERROR: Failed to send first enter input. Error code: {:?}", error);
+            return Err(anyhow::anyhow!("Failed to send first enter input. Error: {:?}", error));
         }
-        println!("DEBUG: Enter sent, {} events processed", sent);
+        println!("DEBUG: First Enter sent, {} events processed", sent);
 
-        println!("DEBUG: Space + paste + enter sequence completed successfully");
+        // Wait for popup to appear
+        std::thread::sleep(std::time::Duration::from_millis(200));
+
+        // Send second Enter key (to validate the popup)
+        println!("DEBUG: Sending second ENTER key (validate popup)...");
+        let enter_inputs_2 = [
+            create_key_input(VK_RETURN, KEYBD_EVENT_FLAGS(0)), // Appui
+            create_key_input(VK_RETURN, KEYEVENTF_KEYUP),      // Relâchement
+        ];
+
+        let sent = SendInput(&enter_inputs_2, std::mem::size_of::<INPUT>() as i32);
+        if sent == 0 {
+            let error = GetLastError();
+            println!("ERROR: Failed to send second enter input. Error code: {:?}", error);
+            return Err(anyhow::anyhow!("Failed to send second enter input. Error: {:?}", error));
+        }
+        println!("DEBUG: Second Enter sent, {} events processed", sent);
+
+        println!("DEBUG: Space + paste + enter + enter sequence completed successfully");
     }
 
     Ok(())
