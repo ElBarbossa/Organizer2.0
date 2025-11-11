@@ -11,11 +11,16 @@ use windows::Win32::UI::WindowsAndMessaging::{
     EnumWindows, GetClassNameW, GetWindowTextW, GetWindowThreadProcessId, IsWindowVisible,
     SetForegroundWindow, SetWindowPos, SWP_NOMOVE, SWP_NOSIZE,
     HWND_TOP, AllowSetForegroundWindow, ShowWindow, SW_HIDE, SW_SHOW,
+    PostMessageW, WM_KEYDOWN, WM_KEYUP, GetForegroundWindow,
 };
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP,
     VK_SPACE, VK_CONTROL, VK_V,
 };
+use windows::Win32::System::Threading::{
+    AttachThreadInput, GetCurrentThreadId,
+};
+use windows::Win32::Foundation::WPARAM;
 
 // Note: Toolbar messages kept for future reference if needed
 // const TB_BUTTONCOUNT: u32 = 0x0418;
@@ -261,40 +266,79 @@ pub fn reorder_taskbar_windows(order: Vec<String>) -> Result<()> {
 pub fn send_space_paste_to_window(handle: isize) -> Result<()> {
     println!("DEBUG: Sending space + paste sequence to window {}", handle);
 
-    // First, focus the window
-    focus_window(handle)?;
-
-    // Wait a bit for the window to be fully focused
-    std::thread::sleep(std::time::Duration::from_millis(100));
-
     unsafe {
-        // Create input events
+        let hwnd = HWND(handle);
+
+        // First, focus the window
+        focus_window(handle)?;
+
+        // Wait for the window to be fully focused
+        std::thread::sleep(std::time::Duration::from_millis(200));
+
+        // Verify the window is now in foreground
+        let fg_hwnd = GetForegroundWindow();
+        if fg_hwnd.0 != handle {
+            println!("WARNING: Window not in foreground after focus attempt. FG: {}, Target: {}", fg_hwnd.0, handle);
+            // Try to attach thread input to force focus
+            let mut target_thread_id = 0u32;
+            GetWindowThreadProcessId(hwnd, Some(&mut target_thread_id));
+            let current_thread_id = GetCurrentThreadId();
+
+            if target_thread_id != 0 && target_thread_id != current_thread_id {
+                let _ = AttachThreadInput(current_thread_id, target_thread_id, true);
+                SetForegroundWindow(hwnd);
+                let _ = AttachThreadInput(current_thread_id, target_thread_id, false);
+                std::thread::sleep(std::time::Duration::from_millis(200));
+            }
+        }
+
+        println!("DEBUG: Window focused, sending key sequence...");
+
+        // Method 1: Try PostMessage (direct to window)
+        // Send Space key
+        println!("DEBUG: Sending SPACE key...");
+        PostMessageW(hwnd, WM_KEYDOWN, WPARAM(VK_SPACE.0 as usize), LPARAM(0)).ok();
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        PostMessageW(hwnd, WM_KEYUP, WPARAM(VK_SPACE.0 as usize), LPARAM(0xC0000001u32 as isize)).ok();
+
+        // Wait between space and paste
+        std::thread::sleep(std::time::Duration::from_millis(100));
+
+        // Send Ctrl+V (paste)
+        println!("DEBUG: Sending CTRL+V (paste)...");
+        PostMessageW(hwnd, WM_KEYDOWN, WPARAM(VK_CONTROL.0 as usize), LPARAM(0x1D0001)).ok();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        PostMessageW(hwnd, WM_KEYDOWN, WPARAM(VK_V.0 as usize), LPARAM(0x2F0001)).ok();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        PostMessageW(hwnd, WM_KEYUP, WPARAM(VK_V.0 as usize), LPARAM(0xC02F0001u32 as isize)).ok();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        PostMessageW(hwnd, WM_KEYUP, WPARAM(VK_CONTROL.0 as usize), LPARAM(0xC01D0001u32 as isize)).ok();
+
+        println!("DEBUG: Key sequence sent via PostMessage");
+
+        // Also try with SendInput as fallback (global input)
+        std::thread::sleep(std::time::Duration::from_millis(100));
+
         let mut inputs: Vec<INPUT> = Vec::new();
 
-        // Press Space
+        // Space
         inputs.push(create_key_input(VK_SPACE.0 as u16, false));
-        // Release Space
         inputs.push(create_key_input(VK_SPACE.0 as u16, true));
-
-        // Small delay between space and paste
         SendInput(&inputs, std::mem::size_of::<INPUT>() as i32);
-        std::thread::sleep(std::time::Duration::from_millis(50));
         inputs.clear();
 
-        // Press Ctrl
-        inputs.push(create_key_input(VK_CONTROL.0 as u16, false));
-        // Press V
-        inputs.push(create_key_input(VK_V.0 as u16, false));
-        // Release V
-        inputs.push(create_key_input(VK_V.0 as u16, true));
-        // Release Ctrl
-        inputs.push(create_key_input(VK_CONTROL.0 as u16, true));
+        std::thread::sleep(std::time::Duration::from_millis(100));
 
-        // Send the input
+        // Ctrl+V
+        inputs.push(create_key_input(VK_CONTROL.0 as u16, false));
+        inputs.push(create_key_input(VK_V.0 as u16, false));
+        inputs.push(create_key_input(VK_V.0 as u16, true));
+        inputs.push(create_key_input(VK_CONTROL.0 as u16, true));
         SendInput(&inputs, std::mem::size_of::<INPUT>() as i32);
+
+        println!("DEBUG: Space + paste sequence sent successfully");
     }
 
-    println!("DEBUG: Space + paste sequence sent successfully");
     Ok(())
 }
 
