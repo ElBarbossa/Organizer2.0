@@ -756,7 +756,8 @@ async function sendSpacePasteEnter(withFocus) {
 // Check clipboard for /travel and auto-send
 async function checkClipboardForTravel() {
     try {
-        const clipboardText = await navigator.clipboard.readText();
+        // Use Tauri clipboard API instead of navigator.clipboard
+        const clipboardText = await invoke('read_clipboard');
 
         // Check if clipboard changed and contains /travel
         if (clipboardText !== lastClipboardContent && clipboardText.includes('/travel')) {
@@ -782,8 +783,8 @@ async function checkClipboardForTravel() {
             lastClipboardContent = clipboardText;
         }
     } catch (error) {
-        // Ignore clipboard access errors (happens when not focused)
-        // logError('Erreur lors de la lecture du presse-papier:', error);
+        // Ignore clipboard access errors (happens when clipboard is empty)
+        // This is normal and expected
     }
 }
 

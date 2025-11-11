@@ -436,6 +436,18 @@ fn send_space_paste_enter(handle: isize, with_focus: bool) -> Result<(), String>
         .map_err(|e| format!("Failed to send space + paste + enter + enter: {}", e))
 }
 
+/// Read clipboard content
+#[tauri::command]
+fn read_clipboard(app_handle: AppHandle) -> Result<String, String> {
+    use tauri::ClipboardManager;
+
+    app_handle
+        .clipboard_manager()
+        .read_text()
+        .map_err(|e| format!("Failed to read clipboard: {}", e))
+        .and_then(|opt| opt.ok_or_else(|| "Clipboard is empty".to_string()))
+}
+
 fn main() {
     // Initialize app state
     let state = AppState::new().expect("Failed to initialize app state");
@@ -489,6 +501,7 @@ fn main() {
             delete_profile,
             show_window,
             send_space_paste_enter,
+            read_clipboard,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
