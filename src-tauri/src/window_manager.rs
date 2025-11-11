@@ -273,7 +273,7 @@ pub fn send_space_paste_to_window(handle: isize) -> Result<()> {
         focus_window(handle)?;
 
         // Wait for the window to be fully focused
-        std::thread::sleep(std::time::Duration::from_millis(200));
+        std::thread::sleep(std::time::Duration::from_millis(300));
 
         // Verify the window is now in foreground
         let fg_hwnd = GetForegroundWindow();
@@ -288,53 +288,56 @@ pub fn send_space_paste_to_window(handle: isize) -> Result<()> {
                 let _ = AttachThreadInput(current_thread_id, target_thread_id, true);
                 SetForegroundWindow(hwnd);
                 let _ = AttachThreadInput(current_thread_id, target_thread_id, false);
-                std::thread::sleep(std::time::Duration::from_millis(200));
+                std::thread::sleep(std::time::Duration::from_millis(300));
             }
         }
 
-        println!("DEBUG: Window focused, sending key sequence...");
-
-        // Method 1: Try PostMessage (direct to window)
-        // Send Space key
-        println!("DEBUG: Sending SPACE key...");
-        PostMessageW(hwnd, WM_KEYDOWN, WPARAM(VK_SPACE.0 as usize), LPARAM(0)).ok();
-        std::thread::sleep(std::time::Duration::from_millis(50));
-        PostMessageW(hwnd, WM_KEYUP, WPARAM(VK_SPACE.0 as usize), LPARAM(0xC0000001u32 as isize)).ok();
-
-        // Wait between space and paste
-        std::thread::sleep(std::time::Duration::from_millis(100));
-
-        // Send Ctrl+V (paste)
-        println!("DEBUG: Sending CTRL+V (paste)...");
-        PostMessageW(hwnd, WM_KEYDOWN, WPARAM(VK_CONTROL.0 as usize), LPARAM(0x1D0001)).ok();
-        std::thread::sleep(std::time::Duration::from_millis(20));
-        PostMessageW(hwnd, WM_KEYDOWN, WPARAM(VK_V.0 as usize), LPARAM(0x2F0001)).ok();
-        std::thread::sleep(std::time::Duration::from_millis(20));
-        PostMessageW(hwnd, WM_KEYUP, WPARAM(VK_V.0 as usize), LPARAM(0xC02F0001u32 as isize)).ok();
-        std::thread::sleep(std::time::Duration::from_millis(20));
-        PostMessageW(hwnd, WM_KEYUP, WPARAM(VK_CONTROL.0 as usize), LPARAM(0xC01D0001u32 as isize)).ok();
-
-        println!("DEBUG: Key sequence sent via PostMessage");
-
-        // Also try with SendInput as fallback (global input)
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        println!("DEBUG: Window focused, sending key sequence with SendInput...");
 
         let mut inputs: Vec<INPUT> = Vec::new();
 
-        // Space
+        // Send Space key
+        println!("DEBUG: Sending SPACE key...");
         inputs.push(create_key_input(VK_SPACE.0 as u16, false));
         inputs.push(create_key_input(VK_SPACE.0 as u16, true));
+        let sent = SendInput(&inputs, std::mem::size_of::<INPUT>() as i32);
+        println!("DEBUG: Space sent, {} events processed", sent);
+        inputs.clear();
+
+        // Wait between space and paste
+        std::thread::sleep(std::time::Duration::from_millis(150));
+
+        // Send Ctrl+V (paste) - maintain Ctrl pressed while V is pressed
+        println!("DEBUG: Sending CTRL+V (paste)...");
+
+        // Press Ctrl
+        inputs.push(create_key_input(VK_CONTROL.0 as u16, false));
         SendInput(&inputs, std::mem::size_of::<INPUT>() as i32);
         inputs.clear();
 
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        // Small delay to ensure Ctrl is registered
+        std::thread::sleep(std::time::Duration::from_millis(50));
 
-        // Ctrl+V
-        inputs.push(create_key_input(VK_CONTROL.0 as u16, false));
+        // Press V (while Ctrl is held)
         inputs.push(create_key_input(VK_V.0 as u16, false));
-        inputs.push(create_key_input(VK_V.0 as u16, true));
-        inputs.push(create_key_input(VK_CONTROL.0 as u16, true));
         SendInput(&inputs, std::mem::size_of::<INPUT>() as i32);
+        inputs.clear();
+
+        // Small delay before releasing
+        std::thread::sleep(std::time::Duration::from_millis(50));
+
+        // Release V
+        inputs.push(create_key_input(VK_V.0 as u16, true));
+        SendInput(&inputs, std::mem::size_of::<INPUT>() as i32);
+        inputs.clear();
+
+        // Small delay before releasing Ctrl
+        std::thread::sleep(std::time::Duration::from_millis(50));
+
+        // Release Ctrl
+        inputs.push(create_key_input(VK_CONTROL.0 as u16, true));
+        let sent = SendInput(&inputs, std::mem::size_of::<INPUT>() as i32);
+        println!("DEBUG: Ctrl+V sent, {} events processed", sent);
 
         println!("DEBUG: Space + paste sequence sent successfully");
     }
