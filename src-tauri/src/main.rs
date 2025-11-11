@@ -429,7 +429,8 @@ fn show_window(app_handle: AppHandle) -> Result<(), String> {
 }
 
 /// Send space + paste + enter + enter key sequence to a specific window
-/// Sequence: Space → Ctrl+V → Enter (send command) → Enter (validate popup)
+/// Sequence: Space → Ctrl+V → Enter (send command) → Wait 500ms → Enter (validate popup)
+/// Always focuses the target window and keeps it in foreground
 #[tauri::command]
 fn send_space_paste_enter(handle: isize, with_focus: bool) -> Result<(), String> {
     window_manager::send_space_paste_enter_to_window(handle, with_focus)

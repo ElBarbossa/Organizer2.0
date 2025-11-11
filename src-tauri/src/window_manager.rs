@@ -285,22 +285,13 @@ fn create_key_input(vk: VIRTUAL_KEY, flags: KEYBD_EVENT_FLAGS) -> INPUT {
 }
 
 /// Send a key sequence (Space + Paste + Enter + Enter) to a specific window
-/// Sequence: Space → Ctrl+V → Enter (send command) → Enter (validate popup)
-/// If with_focus is false, will restore the previous foreground window after sending
+/// Sequence: Space → Ctrl+V → Enter (send command) → Wait → Enter (validate popup)
+/// Always focuses the target window (required for SendInput)
 pub fn send_space_paste_enter_to_window(handle: isize, with_focus: bool) -> Result<()> {
     println!("DEBUG: Sending space + paste + enter + enter sequence to window {} (with_focus: {})", handle, with_focus);
 
     unsafe {
         let hwnd = HWND(handle);
-
-        // Save the current foreground window if we need to restore it
-        let original_fg_hwnd = if !with_focus {
-            let fg = GetForegroundWindow();
-            println!("DEBUG: Saving original foreground window: {}", fg.0);
-            Some(fg)
-        } else {
-            None
-        };
 
         // Always focus the target window (required for SendInput to work)
         let fg_hwnd = GetForegroundWindow();
@@ -404,8 +395,8 @@ pub fn send_space_paste_enter_to_window(handle: isize, with_focus: bool) -> Resu
         }
         println!("DEBUG: First Enter sent, {} events processed", sent);
 
-        // Wait for popup to appear
-        std::thread::sleep(std::time::Duration::from_millis(200));
+        // Wait longer for popup to appear (increased delay)
+        std::thread::sleep(std::time::Duration::from_millis(500));
 
         // Send second Enter key (to validate the popup)
         println!("DEBUG: Sending second ENTER key (validate popup)...");
@@ -421,13 +412,6 @@ pub fn send_space_paste_enter_to_window(handle: isize, with_focus: bool) -> Resu
             return Err(anyhow::anyhow!("Failed to send second enter input. Error: {:?}", error));
         }
         println!("DEBUG: Second Enter sent, {} events processed", sent);
-
-        // Restore original foreground window if needed (for auto-mode)
-        if let Some(original_hwnd) = original_fg_hwnd {
-            println!("DEBUG: Restoring original foreground window: {}", original_hwnd.0);
-            std::thread::sleep(std::time::Duration::from_millis(100)); // Small delay to let sequence complete
-            SetForegroundWindow(original_hwnd);
-        }
 
         println!("DEBUG: Space + paste + enter + enter sequence completed successfully");
     }
