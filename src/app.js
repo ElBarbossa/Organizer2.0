@@ -1199,10 +1199,14 @@ async function setupHotkeys() {
 async function loadProfiles() {
     log('Chargement des profils...');
     let profiles = [];
+    // Liste des profils à exclure (profils temporaires/système)
+    const excludedProfiles = ['Current', 'temp', 'temporary'];
 
     try {
         profiles = await invoke('list_profiles');
         log('Profils chargés depuis Rust:', profiles.length, profiles);
+        // Filtrer les profils temporaires de Rust
+        profiles = profiles.filter(p => !excludedProfiles.includes(p));
     } catch (error) {
         logError('Échec du chargement des profils depuis Rust, utilisation de localStorage uniquement:', error);
         profiles = [];
@@ -1717,10 +1721,19 @@ async function loadProfileWithHotkeys(profileName) {
 // Lister les profils avec leurs infos
 function listSavedProfiles() {
     const profiles = [];
+    // Liste des profils à exclure (profils temporaires/système)
+    const excludedProfiles = ['Current', 'temp', 'temporary'];
+
     for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
         if (key && key.startsWith('rustfocus_profile_')) {
             const profileName = key.replace('rustfocus_profile_', '');
+
+            // Exclure les profils temporaires
+            if (excludedProfiles.includes(profileName)) {
+                continue;
+            }
+
             const data = localStorage.getItem(key);
             try {
                 const config = JSON.parse(data);
