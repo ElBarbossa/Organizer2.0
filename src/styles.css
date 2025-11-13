@@ -633,7 +633,7 @@ body {
 
 .settings-columns {
     display: flex;
-    gap: 12px;
+    gap: 10px;
     flex: 1;
     overflow: hidden;
 }
@@ -643,27 +643,27 @@ body {
     background: var(--bg-secondary);
     border-radius: 8px;
     border: 1px solid var(--border-color);
-    padding: 15px;
+    padding: 10px;
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 4px;
 }
 
 .settings-card h3 {
-    font-size: 15px;
-    margin: 0 0 10px 0;
+    font-size: 14px;
+    margin: 0 0 8px 0;
     color: var(--primary-color);
     border-bottom: 1px solid var(--border-color);
-    padding-bottom: 8px;
+    padding-bottom: 6px;
 }
 
 .settings-actions {
     display: flex;
-    gap: 10px;
+    gap: 8px;
     justify-content: center;
-    padding-top: 12px;
-    margin-top: 12px;
+    padding-top: 10px;
+    margin-top: 10px;
 }
 
 .space-paste-section {
@@ -710,15 +710,15 @@ body {
     background: var(--bg-secondary);
     border-radius: 8px;
     border: 1px solid var(--border-color);
-    padding: 12px;
-    margin-top: 12px;
+    padding: 10px;
+    margin-top: 10px;
 }
 
 .update-section h3 {
-    font-size: 15px;
+    font-size: 14px;
     color: var(--primary-color);
-    margin: 0 0 10px 0;
-    padding-bottom: 8px;
+    margin: 0 0 8px 0;
+    padding-bottom: 6px;
     border-bottom: 1px solid var(--border-color);
 }
 
@@ -726,12 +726,12 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
 }
 
 .version-text {
     color: var(--text-secondary);
-    font-size: 13px;
+    font-size: 12px;
 }
 
 .version-text strong {
@@ -837,7 +837,7 @@ body {
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
-    padding: 15px 20px;
+    padding: 10px 15px;
     background: var(--bg-primary);
 }
 
@@ -852,14 +852,14 @@ body {
 .settings-section-header {
     display: flex;
     align-items: center;
-    gap: 10px;
-    margin-bottom: 15px;
-    padding-bottom: 10px;
+    gap: 8px;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
     border-bottom: 2px solid var(--border-color);
 }
 
 .settings-section-header h2 {
-    font-size: 18px;
+    font-size: 16px;
     color: var(--text-primary);
     margin: 0;
 }
@@ -880,8 +880,8 @@ body {
     background: var(--bg-secondary);
     border-radius: 8px;
     border: 1px solid var(--border-color);
-    padding: 15px;
-    margin-bottom: 15px;
+    padding: 10px;
+    margin-bottom: 10px;
 }
 
 .advanced-function:last-child {
@@ -889,18 +889,18 @@ body {
 }
 
 .advanced-function h3 {
-    font-size: 15px;
+    font-size: 14px;
     color: var(--primary-color);
-    margin: 0 0 12px 0;
-    padding-bottom: 8px;
+    margin: 0 0 8px 0;
+    padding-bottom: 6px;
     border-bottom: 1px solid var(--border-color);
 }
 
 .advanced-function .input-group {
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    margin-bottom: 12px;
+    gap: 5px;
+    margin-bottom: 8px;
 }
 
 .advanced-function .input-group:last-child {
@@ -910,16 +910,16 @@ body {
 .advanced-function .input-group label {
     color: var(--text-secondary);
     font-weight: 500;
-    font-size: 13px;
+    font-size: 12px;
 }
 
 .advanced-function .input-field {
-    padding: 8px;
+    padding: 6px;
     border: 1px solid var(--border-color);
     border-radius: 6px;
     background: var(--bg-primary);
     color: var(--text-primary);
-    font-size: 13px;
+    font-size: 12px;
     transition: border-color 0.2s ease;
 }
 
@@ -991,9 +991,9 @@ kbd.waiting {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 6px 0;
+    padding: 4px 0;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-    gap: 10px;
+    gap: 6px;
 }
 
 .hotkey-config-row:last-child {
@@ -1003,20 +1003,20 @@ kbd.waiting {
 .hotkey-config-row label {
     color: var(--text-secondary);
     flex: 0 0 auto;
-    min-width: 85px;
-    font-size: 13px;
+    min-width: 70px;
+    font-size: 12px;
 }
 
 .settings-card .hotkey-config-row kbd {
     flex: 1;
-    min-width: 80px;
-    padding: 4px 10px;
-    font-size: 12px;
+    min-width: 65px;
+    padding: 3px 8px;
+    font-size: 11px;
 }
 
 .btn-sm {
-    padding: 4px 8px;
-    font-size: 12px;
+    padding: 3px 6px;
+    font-size: 11px;
     white-space: nowrap;
     flex-shrink: 0;
 }
