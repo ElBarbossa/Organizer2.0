@@ -1336,20 +1336,35 @@ function renderProfileList(profiles) {
 
                 log('Suppression confirmée, suppression du profil:', name);
 
-                // Delete from localStorage only (since Rust backend fails)
-                localStorage.removeItem(`rustfocus_profile_${name}`);
-                log('Profil supprimé de localStorage');
+                // Supprimer des deux côtés en parallèle
+                const deletePromises = [];
+
+                // Suppression de localStorage
+                deletePromises.push(
+                    Promise.resolve().then(() => {
+                        localStorage.removeItem(`rustfocus_profile_${name}`);
+                        log('Profil supprimé de localStorage');
+                    })
+                );
+
+                // Suppression côté Rust
+                deletePromises.push(
+                    invoke('delete_profile', { name })
+                        .then(() => {
+                            log('Profil supprimé côté Rust (succès)');
+                        })
+                        .catch(rustError => {
+                            log('Note: Suppression côté Rust a échoué, mais localStorage a été nettoyé');
+                        })
+                );
+
+                // Attendre que les deux suppressions soient terminées
+                await Promise.all(deletePromises);
 
                 updateStatusText(`Profil "${name}" supprimé`);
-                await loadProfiles();
 
-                // Try Rust backend but don't fail if it doesn't work
-                try {
-                    await invoke('delete_profile', { name });
-                    log('Profil supprimé côté Rust (succès)');
-                } catch (rustError) {
-                    log('Note: Suppression côté Rust a échoué, mais localStorage a été nettoyé');
-                }
+                // Recharger la liste APRÈS que les deux suppressions soient terminées
+                await loadProfiles();
             } catch (error) {
                 logError('Échec de la suppression du profil:', error);
                 alert(`Échec de la suppression du profil: ${error}`);
