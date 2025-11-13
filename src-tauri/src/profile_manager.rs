@@ -116,7 +116,7 @@ impl ProfileManager {
 
     /// Get the path to the current profile (last used)
     pub fn get_current_profile_path(&self) -> PathBuf {
-        self.profiles_dir.join("current.json")
+        self.profiles_dir.join(".current_state.json")
     }
 
     /// Save the current profile (auto-save)
