@@ -80,9 +80,13 @@
                                 <span class="menu-icon">⌨️</span>
                                 <span class="menu-text">Configuration Touche</span>
                             </li>
-                            <li class="settings-menu-item" data-section="advanced" onclick="switchSettingsSection('advanced')">
-                                <span class="menu-icon">🚀</span>
-                                <span class="menu-text">Fonctions avancées</span>
+                            <li class="settings-menu-item" data-section="travel" onclick="switchSettingsSection('travel')">
+                                <span class="menu-icon">🗺️</span>
+                                <span class="menu-text">Travel automatique</span>
+                            </li>
+                            <li class="settings-menu-item" data-section="update" onclick="switchSettingsSection('update')">
+                                <span class="menu-icon">📦</span>
+                                <span class="menu-text">Mise à jour</span>
                             </li>
                         </ul>
                     </nav>
@@ -164,15 +168,14 @@
                             </div>
                         </div>
 
-                        <!-- Section: Fonctions avancées -->
-                        <div class="settings-content-section" id="section-advanced">
+                        <!-- Section: Travel automatique -->
+                        <div class="settings-content-section" id="section-travel">
                             <div class="settings-section-header">
-                                <h2>🚀 Fonctions avancées</h2>
-                                <span class="help-icon" title="Fonctionnalités avancées pour automatiser certaines actions">💡</span>
+                                <h2>🗺️ Travel automatique</h2>
+                                <span class="help-icon" title="Envoie automatiquement la séquence de touche pour le travel">💡</span>
                             </div>
 
                             <div class="advanced-function">
-                                <h3>🗺️ Travel automatique</h3>
                                 <div class="input-group">
                                     <label for="space-paste-window-select">Fenêtre cible :</label>
                                     <select id="space-paste-window-select" class="input-field">
@@ -190,10 +193,16 @@
                                     </small>
                                 </div>
                             </div>
+                        </div>
 
-                            <!-- Section Mise à jour -->
+                        <!-- Section: Mise à jour -->
+                        <div class="settings-content-section" id="section-update">
+                            <div class="settings-section-header">
+                                <h2>📦 Mise à jour</h2>
+                                <span class="help-icon" title="Vérifier les mises à jour de l'application">💡</span>
+                            </div>
+
                             <div class="update-section">
-                                <h3>📦 Mise à jour</h3>
                                 <div class="update-info">
                                     <span class="version-text">Version actuelle : <strong id="current-version">...</strong></span>
                                     <button class="btn btn-secondary btn-sm" onclick="checkForUpdates()" id="check-update-btn">
