@@ -114,11 +114,13 @@ async function init() {
 
     // Check if there's a current profile loaded in the backend (Rust)
     let profileLoadedFromBackend = false;
+    const excludedProfiles = ['Current', 'temp', 'temporary'];
     try {
         const currentProfile = await invoke('get_current_profile');
         log('Profil actuel chargé côté Rust:', currentProfile);
 
-        if (currentProfile && currentProfile.name !== "temp") {
+        // Filtrer les profils temporaires
+        if (currentProfile && !excludedProfiles.includes(currentProfile.name)) {
             log('Synchronisation avec le profil chargé côté Rust:', currentProfile.name);
             currentProfileName = currentProfile.name;
             profileLoadedFromBackend = true;
@@ -1270,6 +1272,26 @@ function renderProfileList(profiles) {
                 log('Rechargement des fenêtres après chargement du profil...');
                 await loadWindows();
 
+                // Restaurer la fenêtre cible du travel automatique APRÈS que les fenêtres soient chargées
+                const savedConfig = localStorage.getItem(`rustfocus_profile_${name}`);
+                if (savedConfig) {
+                    try {
+                        const config = JSON.parse(savedConfig);
+                        if (config.autoTravelCharacterName) {
+                            const autoTravelWindowSelect = document.getElementById('space-paste-window-select');
+                            if (autoTravelWindowSelect) {
+                                const targetWindow = windowList.find(w => w.character_name === config.autoTravelCharacterName);
+                                if (targetWindow) {
+                                    autoTravelWindowSelect.value = targetWindow.handle;
+                                    log('✓ Fenêtre cible du travel automatique restaurée après chargement des fenêtres:', config.autoTravelCharacterName);
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        log('Erreur lors de la restauration de la fenêtre cible:', e);
+                    }
+                }
+
                 // Apply the loaded order to the taskbar immediately
                 const characterNames = windowList.map(w => w.character_name);
                 log('Application automatique de l\'ordre après chargement du profil:', characterNames);
@@ -1562,6 +1584,13 @@ async function saveProfileWithHotkeys(profileName) {
     log('Sauvegarde du profil avec configuration des touches:', profileName);
     log('Ordre actuel des fenêtres:', windowList.map(w => w.character_name));
 
+    // Ne pas sauvegarder les profils temporaires/système
+    const excludedProfiles = ['Current', 'temp', 'temporary'];
+    if (excludedProfiles.includes(profileName)) {
+        log('⚠ Tentative de sauvegarde d\'un profil temporaire ignorée:', profileName);
+        return;
+    }
+
     // Vérifier si le profil existe déjà pour préserver ses données
     const existingProfile = localStorage.getItem(`rustfocus_profile_${profileName}`);
     let existingConfig = null;
@@ -1579,6 +1608,16 @@ async function saveProfileWithHotkeys(profileName) {
     const autoTravelCheckbox = document.getElementById('auto-travel-checkbox');
     const autoTravelWindowSelect = document.getElementById('space-paste-window-select');
 
+    // Trouver le nom du personnage correspondant au handle sélectionné
+    let autoTravelCharacterName = '';
+    if (autoTravelWindowSelect && autoTravelWindowSelect.value) {
+        const selectedHandle = parseInt(autoTravelWindowSelect.value);
+        const selectedWindow = windowList.find(w => w.handle === selectedHandle);
+        if (selectedWindow) {
+            autoTravelCharacterName = selectedWindow.character_name;
+        }
+    }
+
     // Sauvegarder la configuration dans localStorage pour persistance
     // On ne met à jour que CE profil spécifique, pas tous les autres
     const configToSave = {
@@ -1586,7 +1625,7 @@ async function saveProfileWithHotkeys(profileName) {
         hotkeyConfig: hotkeyConfig,
         windowOrder: windowList.map(w => w.character_name), // Ordre actuel des fenêtres
         autoTravelEnabled: autoTravelCheckbox ? autoTravelCheckbox.checked : false,
-        autoTravelWindow: autoTravelWindowSelect ? autoTravelWindowSelect.value : '',
+        autoTravelCharacterName: autoTravelCharacterName, // Nom du personnage au lieu du handle
         timestamp: Date.now()
     };
 
@@ -1708,9 +1747,16 @@ async function loadProfileWithHotkeys(profileName) {
                 log('✓ État du travel automatique restauré:', config.autoTravelEnabled);
             }
 
-            if (autoTravelWindowSelect && config.autoTravelWindow) {
-                autoTravelWindowSelect.value = config.autoTravelWindow;
-                log('✓ Fenêtre cible du travel automatique restaurée:', config.autoTravelWindow);
+            // Restaurer la fenêtre cible en cherchant par nom de personnage
+            if (autoTravelWindowSelect && config.autoTravelCharacterName) {
+                // Trouver le handle correspondant au nom du personnage
+                const targetWindow = windowList.find(w => w.character_name === config.autoTravelCharacterName);
+                if (targetWindow) {
+                    autoTravelWindowSelect.value = targetWindow.handle;
+                    log('✓ Fenêtre cible du travel automatique restaurée:', config.autoTravelCharacterName, '(handle:', targetWindow.handle, ')');
+                } else {
+                    log('⚠ Fenêtre cible du travel non trouvée:', config.autoTravelCharacterName);
+                }
             }
         } catch (error) {
             logError('Erreur lors du parsing de la configuration:', error);
