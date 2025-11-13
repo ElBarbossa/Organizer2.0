@@ -769,35 +769,88 @@ body {
     margin-top: 10px;
 }
 
-/* Settings Vertical Layout */
-.settings-vertical-layout {
+/* Settings Sidebar Layout */
+.settings-sidebar-layout {
     display: flex;
-    flex-direction: column;
-    gap: 30px;
-    padding: 20px;
-    max-width: 900px;
-    margin: 0 auto;
+    height: 100%;
+    overflow: hidden;
 }
 
-.settings-section {
+/* Menu sur la gauche */
+.settings-menu {
+    flex: 0 0 250px;
     background: var(--bg-secondary);
-    border-radius: 12px;
-    border: 1px solid var(--border-color);
-    padding: 25px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    border-right: 2px solid var(--border-color);
+    padding: 20px 0;
+    overflow-y: auto;
+}
+
+.settings-menu-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.settings-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 15px 20px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border-left: 3px solid transparent;
+    position: relative;
+}
+
+.settings-menu-item:hover {
+    background: var(--hover-color);
+    border-left-color: var(--primary-color);
+}
+
+.settings-menu-item.active {
+    background: var(--bg-tertiary);
+    border-left-color: var(--primary-color);
+    color: var(--primary-color);
+}
+
+.settings-menu-item .menu-icon {
+    font-size: 20px;
+    flex-shrink: 0;
+}
+
+.settings-menu-item .menu-text {
+    font-size: 14px;
+    font-weight: 600;
+}
+
+/* Contenu sur la droite */
+.settings-content-area {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 30px;
+    background: var(--bg-primary);
+}
+
+.settings-content-section {
+    display: none;
+}
+
+.settings-content-section.active {
+    display: block;
 }
 
 .settings-section-header {
     display: flex;
     align-items: center;
     gap: 10px;
-    margin-bottom: 20px;
+    margin-bottom: 25px;
     padding-bottom: 15px;
     border-bottom: 2px solid var(--border-color);
 }
 
 .settings-section-header h2 {
-    font-size: 20px;
+    font-size: 22px;
     color: var(--text-primary);
     margin: 0;
 }
@@ -815,7 +868,7 @@ body {
 }
 
 .advanced-function {
-    background: var(--bg-tertiary);
+    background: var(--bg-secondary);
     border-radius: 10px;
     border: 1px solid var(--border-color);
     padding: 20px;

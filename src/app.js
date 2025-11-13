@@ -307,6 +307,38 @@ function setupTabs() {
     log('Configuration des onglets terminée avec succès');
 }
 
+// Switch between settings sections (for sidebar menu)
+function switchSettingsSection(sectionName) {
+    log('Changement de section de paramètres:', sectionName);
+
+    // Remove active class from all menu items
+    const menuItems = document.querySelectorAll('.settings-menu-item');
+    menuItems.forEach(item => {
+        item.classList.remove('active');
+    });
+
+    // Add active class to clicked menu item
+    const activeMenuItem = document.querySelector(`.settings-menu-item[data-section="${sectionName}"]`);
+    if (activeMenuItem) {
+        activeMenuItem.classList.add('active');
+    }
+
+    // Hide all content sections
+    const contentSections = document.querySelectorAll('.settings-content-section');
+    contentSections.forEach(section => {
+        section.classList.remove('active');
+    });
+
+    // Show the selected content section
+    const targetSection = document.getElementById(`section-${sectionName}`);
+    if (targetSection) {
+        targetSection.classList.add('active');
+        log('Section affichée:', `section-${sectionName}`);
+    } else {
+        logError('SECTION NON TROUVEE:', `section-${sectionName}`);
+    }
+}
+
 // Setup event listeners
 function setupEventListeners() {
     log('Configuration des écouteurs d\'événements...');
@@ -1524,12 +1556,18 @@ async function saveProfileWithHotkeys(profileName) {
         }
     }
 
+    // Récupérer l'état du travel automatique
+    const autoTravelCheckbox = document.getElementById('auto-travel-checkbox');
+    const autoTravelWindowSelect = document.getElementById('space-paste-window-select');
+
     // Sauvegarder la configuration dans localStorage pour persistance
     // On ne met à jour que CE profil spécifique, pas tous les autres
     const configToSave = {
         profileName,
         hotkeyConfig: hotkeyConfig,
         windowOrder: windowList.map(w => w.character_name), // Ordre actuel des fenêtres
+        autoTravelEnabled: autoTravelCheckbox ? autoTravelCheckbox.checked : false,
+        autoTravelWindow: autoTravelWindowSelect ? autoTravelWindowSelect.value : '',
         timestamp: Date.now()
     };
 
@@ -1632,6 +1670,28 @@ async function loadProfileWithHotkeys(profileName) {
                 // IMPORTANT: Il faut s'assurer que loadWindows() utilise cet ordre
             } else {
                 log('Aucun ordre de fenêtres trouvé dans le profil');
+            }
+
+            // Restaurer l'état du travel automatique
+            const autoTravelCheckbox = document.getElementById('auto-travel-checkbox');
+            const autoTravelWindowSelect = document.getElementById('space-paste-window-select');
+
+            if (autoTravelCheckbox && config.autoTravelEnabled !== undefined) {
+                autoTravelCheckbox.checked = config.autoTravelEnabled;
+                // Déclencher l'activation/désactivation du mode auto
+                if (config.autoTravelEnabled) {
+                    clipboardCheckInterval = setInterval(checkClipboardForTravel, 500);
+                } else {
+                    if (clipboardCheckInterval) {
+                        clearInterval(clipboardCheckInterval);
+                    }
+                }
+                log('✓ État du travel automatique restauré:', config.autoTravelEnabled);
+            }
+
+            if (autoTravelWindowSelect && config.autoTravelWindow) {
+                autoTravelWindowSelect.value = config.autoTravelWindow;
+                log('✓ Fenêtre cible du travel automatique restaurée:', config.autoTravelWindow);
             }
         } catch (error) {
             logError('Erreur lors du parsing de la configuration:', error);

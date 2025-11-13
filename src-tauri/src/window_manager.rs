@@ -294,9 +294,17 @@ pub fn send_space_paste_enter_to_window(handle: isize, with_focus: bool) -> Resu
         let hwnd = HWND(handle);
 
         // Always focus the target window (required for SendInput to work)
-        let fg_hwnd = GetForegroundWindow();
-        if fg_hwnd.0 != handle {
-            println!("DEBUG: Window not in foreground, attempting to focus...");
+        // Try multiple times to ensure the window is actually focused
+        let mut focus_success = false;
+        for attempt in 0..3 {
+            let fg_hwnd = GetForegroundWindow();
+            if fg_hwnd.0 == handle {
+                println!("DEBUG: Window already in foreground");
+                focus_success = true;
+                break;
+            }
+
+            println!("DEBUG: Attempt {}/3 - Window not in foreground, attempting to focus...", attempt + 1);
 
             let mut target_thread_id = 0u32;
             GetWindowThreadProcessId(hwnd, Some(&mut target_thread_id));
@@ -309,13 +317,26 @@ pub fn send_space_paste_enter_to_window(handle: isize, with_focus: bool) -> Resu
             } else {
                 SetForegroundWindow(hwnd);
             }
+
+            // Wait a bit for the window to actually come to foreground
             std::thread::sleep(std::time::Duration::from_millis(200));
+
+            // Verify if focus was successful
+            let fg_hwnd = GetForegroundWindow();
+            if fg_hwnd.0 == handle {
+                println!("DEBUG: Successfully focused window on attempt {}", attempt + 1);
+                focus_success = true;
+                break;
+            } else {
+                println!("DEBUG: Focus failed on attempt {}. FG: {}, Target: {}", attempt + 1, fg_hwnd.0, handle);
+            }
         }
 
-        // Vérification finale
-        let fg_hwnd = GetForegroundWindow();
-        if fg_hwnd.0 != handle {
-            println!("WARNING: Window still not in foreground. FG: {}, Target: {}", fg_hwnd.0, handle);
+        // Final verification - fail if window is not in foreground
+        if !focus_success {
+            let fg_hwnd = GetForegroundWindow();
+            println!("ERROR: Failed to focus window after 3 attempts. FG: {}, Target: {}", fg_hwnd.0, handle);
+            return Err(anyhow::anyhow!("Failed to bring window to foreground after multiple attempts. Current foreground: {}, Target: {}", fg_hwnd.0, handle));
         }
 
         // Envoi de la touche Espace avec scan code
