@@ -17,6 +17,11 @@
                                  },
                   "allowlist":  {
                                     "all":  false,
+                                    "clipboard": {
+                                        "all": false,
+                                        "readText": true,
+                                        "writeText": false
+                                    },
                                     "shell":  {
                                                   "all":  false,
                                                   "open":  true
