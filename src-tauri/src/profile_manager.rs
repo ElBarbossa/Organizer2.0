@@ -92,8 +92,8 @@ impl ProfileManager {
 
             if path.extension().and_then(|s| s.to_str()) == Some("json") {
                 if let Some(file_stem) = path.file_stem().and_then(|s| s.to_str()) {
-                    // Filtrer les profils temporaires
-                    if !excluded_profiles.contains(&file_stem) {
+                    // Filtrer les profils temporaires et les fichiers cachés (commençant par .)
+                    if !excluded_profiles.contains(&file_stem) && !file_stem.starts_with('.') {
                         profiles.push(file_stem.to_string());
                     }
                 }
