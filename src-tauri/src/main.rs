@@ -453,10 +453,9 @@ fn main() {
     // Initialize app state
     let state = AppState::new().expect("Failed to initialize app state");
 
-    // Load current profile if it exists
-    if let Ok(Some(profile)) = state.profile_manager.lock().load_current_profile() {
-        *state.current_profile.lock() = Some(profile);
-    }
+    // Note: Ne pas charger automatiquement le profil au démarrage.
+    // Le chargement automatique est géré par JavaScript via localStorage (rustfocus_auto_load_profile).
+    // Le fichier .current_state.json sert uniquement à sauvegarder l'état actuel, pas à le restaurer.
 
     // Create system tray menu
     let tray_menu = SystemTrayMenu::new()

@@ -136,6 +136,17 @@ impl ProfileManager {
     pub fn load_current_profile(&self) -> Result<Option<Profile>> {
         let file_path = self.get_current_profile_path();
 
+        // Migration: Si l'ancien fichier current.json existe, le migrer vers .current_state.json
+        let old_file_path = self.profiles_dir.join("current.json");
+        if old_file_path.exists() && !file_path.exists() {
+            println!("Migration: Déplacement de current.json vers .current_state.json");
+            if let Ok(json) = fs::read_to_string(&old_file_path) {
+                let _ = fs::write(&file_path, json);
+            }
+            // Supprimer l'ancien fichier
+            let _ = fs::remove_file(&old_file_path);
+        }
+
         if !file_path.exists() {
             return Ok(None);
         }
