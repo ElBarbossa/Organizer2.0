@@ -79,6 +79,8 @@ impl ProfileManager {
     /// List all available profiles
     pub fn list_profiles(&self) -> Result<Vec<String>> {
         let mut profiles = Vec::new();
+        // Liste des profils temporaires à exclure
+        let excluded_profiles = vec!["Current", "temp", "temporary"];
 
         if !self.profiles_dir.exists() {
             return Ok(profiles);
@@ -90,7 +92,10 @@ impl ProfileManager {
 
             if path.extension().and_then(|s| s.to_str()) == Some("json") {
                 if let Some(file_stem) = path.file_stem().and_then(|s| s.to_str()) {
-                    profiles.push(file_stem.to_string());
+                    // Filtrer les profils temporaires
+                    if !excluded_profiles.contains(&file_stem) {
+                        profiles.push(file_stem.to_string());
+                    }
                 }
             }
         }

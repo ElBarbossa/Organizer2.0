@@ -191,6 +191,40 @@ async function init() {
     // Now load windows (after profile loading)
     await loadWindows();
 
+    // Restaurer la fenêtre cible du travel automatique APRÈS le chargement des fenêtres
+    if (autoLoadProfile && !profileLoadedFromBackend) {
+        const saved = localStorage.getItem(`rustfocus_profile_${autoLoadProfile}`);
+        if (saved) {
+            try {
+                const config = JSON.parse(saved);
+
+                // Restaurer l'état du travel automatique
+                const autoTravelCheckbox = document.getElementById('auto-travel-checkbox');
+                if (autoTravelCheckbox && config.autoTravelEnabled !== undefined) {
+                    autoTravelCheckbox.checked = config.autoTravelEnabled;
+                    if (config.autoTravelEnabled) {
+                        clipboardCheckInterval = setInterval(checkClipboardForTravel, 500);
+                    }
+                    log('✓ État du travel automatique restauré au démarrage:', config.autoTravelEnabled);
+                }
+
+                // Restaurer la fenêtre cible
+                if (config.autoTravelCharacterName) {
+                    const autoTravelWindowSelect = document.getElementById('space-paste-window-select');
+                    if (autoTravelWindowSelect) {
+                        const targetWindow = windowList.find(w => w.character_name === config.autoTravelCharacterName);
+                        if (targetWindow) {
+                            autoTravelWindowSelect.value = targetWindow.handle;
+                            log('✓ Fenêtre cible du travel automatique restaurée au démarrage:', config.autoTravelCharacterName);
+                        }
+                    }
+                }
+            } catch (e) {
+                log('Erreur lors de la restauration du travel automatique au démarrage:', e);
+            }
+        }
+    }
+
     // Order is already applied in auto-load, no need to reapply
 
     await setupHotkeys();
