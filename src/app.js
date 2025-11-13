@@ -115,6 +115,10 @@ async function init() {
     // Check if there's a current profile loaded in the backend (Rust)
     let profileLoadedFromBackend = false;
     const excludedProfiles = ['Current', 'temp', 'temporary'];
+
+    log('=== DÉMARRAGE: Vérification du profil ===');
+    log('Profil de lancement automatique configuré:', autoLoadProfile);
+
     try {
         const currentProfile = await invoke('get_current_profile');
         log('Profil actuel chargé côté Rust:', currentProfile);
@@ -153,24 +157,31 @@ async function init() {
     }
 
     // Auto-load profile on startup if configured (only if no profile is loaded from backend)
+    log('=== CHARGEMENT AUTOMATIQUE ===');
+    log('autoLoadProfile:', autoLoadProfile);
+    log('profileLoadedFromBackend:', profileLoadedFromBackend);
+
     if (autoLoadProfile && !profileLoadedFromBackend) {
-        log('Chargement automatique du profil au démarrage:', autoLoadProfile);
+        log('✓ Démarrage du chargement automatique du profil:', autoLoadProfile);
         try {
             // Load profile directly from localStorage (same as manual loading)
             await loadProfileWithHotkeys(autoLoadProfile);
             currentProfileName = autoLoadProfile;
+            log('✓ loadProfileWithHotkeys terminé');
 
             // Apply the profile's window order to the taskbar before loading windows
             const saved = localStorage.getItem(`rustfocus_profile_${autoLoadProfile}`);
             if (saved) {
                 const config = JSON.parse(saved);
+                log('Configuration du profil:', config);
                 if (config.windowOrder && config.windowOrder.length > 0) {
+                    log('Application de l\'ordre des fenêtres:', config.windowOrder);
                     await invoke('update_window_order', { order: config.windowOrder });
-                    log('Ordre du profil appliqué à la taskbar avant chargement des fenêtres');
+                    log('✓ Ordre du profil appliqué à la taskbar avant chargement des fenêtres');
                 }
             }
 
-            log('Profil chargé automatiquement depuis localStorage');
+            log('✓ Profil chargé automatiquement depuis localStorage');
 
             // Update profile display immediately after loading
             updateCurrentProfileDisplay(autoLoadProfile);
@@ -179,24 +190,33 @@ async function init() {
             await loadProfiles();
 
         } catch (error) {
-            logError('Échec du chargement automatique du profil:', error);
+            logError('❌ Échec du chargement automatique du profil:', error);
             // If auto-load fails, still load profiles list
             await loadProfiles();
         }
     } else {
+        log('⊘ Pas de chargement automatique (autoLoadProfile:', autoLoadProfile, ', profileLoadedFromBackend:', profileLoadedFromBackend, ')');
         // No auto-load, load profiles list normally
         await loadProfiles();
     }
 
     // Now load windows (after profile loading)
+    log('=== CHARGEMENT DES FENÊTRES ===');
     await loadWindows();
+    log('✓ loadWindows terminé, nombre de fenêtres:', windowList.length);
 
     // Restaurer la fenêtre cible du travel automatique APRÈS le chargement des fenêtres
+    log('=== RESTAURATION TRAVEL AUTOMATIQUE AU DÉMARRAGE ===');
     if (autoLoadProfile && !profileLoadedFromBackend) {
+        log('Tentative de restauration du travel automatique pour le profil:', autoLoadProfile);
         const saved = localStorage.getItem(`rustfocus_profile_${autoLoadProfile}`);
         if (saved) {
             try {
                 const config = JSON.parse(saved);
+                log('Configuration du profil pour travel auto:', {
+                    autoTravelEnabled: config.autoTravelEnabled,
+                    autoTravelCharacterName: config.autoTravelCharacterName
+                });
 
                 // Restaurer l'état du travel automatique
                 const autoTravelCheckbox = document.getElementById('auto-travel-checkbox');
@@ -212,17 +232,28 @@ async function init() {
                 if (config.autoTravelCharacterName) {
                     const autoTravelWindowSelect = document.getElementById('space-paste-window-select');
                     if (autoTravelWindowSelect) {
+                        log('Liste des fenêtres disponibles:', windowList.map(w => w.character_name));
                         const targetWindow = windowList.find(w => w.character_name === config.autoTravelCharacterName);
                         if (targetWindow) {
                             autoTravelWindowSelect.value = targetWindow.handle;
-                            log('✓ Fenêtre cible du travel automatique restaurée au démarrage:', config.autoTravelCharacterName);
+                            log('✓ Fenêtre cible du travel automatique restaurée au démarrage:', config.autoTravelCharacterName, '(handle:', targetWindow.handle, ')');
+                        } else {
+                            log('⚠ Fenêtre cible non trouvée:', config.autoTravelCharacterName);
                         }
+                    } else {
+                        log('⚠ Élément select du travel automatique non trouvé');
                     }
+                } else {
+                    log('Pas de fenêtre cible configurée dans le profil');
                 }
             } catch (e) {
-                log('Erreur lors de la restauration du travel automatique au démarrage:', e);
+                logError('❌ Erreur lors de la restauration du travel automatique au démarrage:', e);
             }
+        } else {
+            log('⚠ Pas de configuration sauvegardée pour le profil:', autoLoadProfile);
         }
+    } else {
+        log('⊘ Pas de restauration du travel automatique (pas de chargement automatique)');
     }
 
     // Order is already applied in auto-load, no need to reapply
@@ -1463,19 +1494,25 @@ function updateAutoLoadProfileSelector(profiles) {
         selectElement.appendChild(option);
     });
 
-    // Add event listener for changes
-    selectElement.addEventListener('change', (e) => {
-        const selectedProfile = e.target.value;
-        if (selectedProfile) {
-            localStorage.setItem('rustfocus_auto_load_profile', selectedProfile);
-            autoLoadProfile = selectedProfile;
-            updateStatusText(`Profil "${selectedProfile}" défini comme lancement automatique`);
-        } else {
-            localStorage.removeItem('rustfocus_auto_load_profile');
-            autoLoadProfile = null;
-            updateStatusText('Lancement automatique désactivé');
-        }
-    });
+    // Add event listener for changes (only once)
+    if (!selectElement.hasAttribute('data-listener-attached')) {
+        selectElement.setAttribute('data-listener-attached', 'true');
+        selectElement.addEventListener('change', (e) => {
+            const selectedProfile = e.target.value;
+            log('Changement de profil de lancement automatique:', selectedProfile);
+            if (selectedProfile) {
+                localStorage.setItem('rustfocus_auto_load_profile', selectedProfile);
+                autoLoadProfile = selectedProfile;
+                log('✓ Profil de lancement automatique défini:', selectedProfile);
+                updateStatusText(`Profil "${selectedProfile}" défini comme lancement automatique`);
+            } else {
+                localStorage.removeItem('rustfocus_auto_load_profile');
+                autoLoadProfile = null;
+                log('✓ Lancement automatique désactivé');
+                updateStatusText('Lancement automatique désactivé');
+            }
+        });
+    }
 }
 
 // Update the windows tab profile selector with current profiles
