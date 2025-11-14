@@ -16,7 +16,7 @@ tauri-build = { version = "1.5", features = [] }
 tauri = { version = "1.5", features = [
     "shell-open",
     "dialog-all",
-    "clipboard-all",
+    "clipboard-read-text",
     "window-close",
     "window-hide",
     "window-maximize",
