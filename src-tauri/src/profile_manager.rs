@@ -76,7 +76,7 @@ impl ProfileManager {
         Ok(profile)
     }
 
-    /// List all available profiles
+    /// List all available profiles (excludes system profiles like "current" and "temp")
     pub fn list_profiles(&self) -> Result<Vec<String>> {
         let mut profiles = Vec::new();
 
@@ -90,7 +90,10 @@ impl ProfileManager {
 
             if path.extension().and_then(|s| s.to_str()) == Some("json") {
                 if let Some(file_stem) = path.file_stem().and_then(|s| s.to_str()) {
-                    profiles.push(file_stem.to_string());
+                    // Filter out system profiles that shouldn't appear in the user list
+                    if file_stem != "current" && file_stem != "temp" {
+                        profiles.push(file_stem.to_string());
+                    }
                 }
             }
         }

@@ -403,6 +403,59 @@ function setupEventListeners() {
             alert(`Échec de la sauvegarde du profil: ${error}`);
         }
     });
+
+    // Quick save profile button (from Windows tab)
+    document.getElementById('quick-save-profile-btn').addEventListener('click', async () => {
+        const nameInput = document.getElementById('quick-profile-name');
+        let profileName = nameInput.value.trim();
+
+        // Si le champ est vide mais qu'un profil est déjà chargé, utiliser ce nom
+        if (!profileName && currentProfileName) {
+            profileName = currentProfileName;
+            log('Utilisation du profil actuel pour la sauvegarde rapide:', profileName);
+        }
+
+        log('Sauvegarde rapide du profil:', profileName);
+
+        if (!profileName) {
+            alert('Veuillez entrer un nom de profil ou charger un profil existant');
+            return;
+        }
+
+        try {
+            // Sauvegarder le profil avec l'ordre actuel des fenêtres
+            await saveProfileWithHotkeys(profileName);
+            log('Profil sauvegardé avec succès:', profileName);
+
+            // Set this as current profile
+            currentProfileName = profileName;
+            updateCurrentProfileDisplay(profileName);
+
+            updateStatusText(`Profil "${profileName}" sauvegardé ✓`);
+            nameInput.value = '';
+
+            // Mettre à jour les listes de profils
+            await loadProfiles();
+
+            // Mettre à jour le sélecteur pour montrer le profil sauvegardé
+            const selectElement = document.getElementById('window-profile-select');
+            if (selectElement) {
+                selectElement.value = profileName;
+            }
+        } catch (error) {
+            logError('Échec de la sauvegarde du profil:', error);
+            alert(`Échec de la sauvegarde du profil: ${error}`);
+        }
+    });
+
+    // Mettre à jour le champ de saisie rapide quand un profil est chargé
+    const windowProfileSelect = document.getElementById('window-profile-select');
+    windowProfileSelect.addEventListener('change', () => {
+        const quickInput = document.getElementById('quick-profile-name');
+        if (quickInput && windowProfileSelect.value) {
+            quickInput.placeholder = `${windowProfileSelect.value} (ou nouveau nom)`;
+        }
+    });
 }
 
 // Load all Dofus windows
@@ -1039,6 +1092,7 @@ async function setupHotkeys() {
 async function loadProfiles() {
     log('Chargement des profils...');
     let profiles = [];
+    const systemProfiles = ['current', 'temp']; // Profils système à exclure
 
     try {
         profiles = await invoke('list_profiles');
@@ -1052,8 +1106,9 @@ async function loadProfiles() {
     const localProfiles = listSavedProfiles();
     log('Profils dans localStorage:', localProfiles.length, localProfiles.map(p => p.name));
 
-    // Merge profiles from Rust and localStorage
-    const allProfiles = [...new Set([...profiles, ...localProfiles.map(p => p.name)])];
+    // Merge profiles from Rust and localStorage, filtering out system profiles
+    const allProfiles = [...new Set([...profiles, ...localProfiles.map(p => p.name)])]
+        .filter(name => !systemProfiles.includes(name));
     log('Profils fusionnés:', allProfiles.length, allProfiles);
 
     renderProfileList(allProfiles);
@@ -1427,6 +1482,12 @@ async function loadProfileWithHotkeys(profileName) {
     // Set current profile name
     currentProfileName = profileName;
 
+    // Mettre à jour le placeholder du champ de sauvegarde rapide
+    const quickInput = document.getElementById('quick-profile-name');
+    if (quickInput) {
+        quickInput.placeholder = `${profileName} (ou nouveau nom)`;
+    }
+
     // Charger d'abord le profil côté backend pour synchroniser les raccourcis
     try {
         await invoke('load_profile', { name: profileName });
@@ -1526,13 +1587,21 @@ async function loadProfileWithHotkeys(profileName) {
     }
 }
 
-// Lister les profils avec leurs infos
+// Lister les profils avec leurs infos (exclut les profils système comme "current" et "temp")
 function listSavedProfiles() {
     const profiles = [];
+    const systemProfiles = ['current', 'temp']; // Profils système à exclure
+
     for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
         if (key && key.startsWith('rustfocus_profile_')) {
             const profileName = key.replace('rustfocus_profile_', '');
+
+            // Filtrer les profils système
+            if (systemProfiles.includes(profileName)) {
+                continue;
+            }
+
             const data = localStorage.getItem(key);
             try {
                 const config = JSON.parse(data);

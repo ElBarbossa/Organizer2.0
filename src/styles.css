@@ -566,6 +566,45 @@ body {
     animation: none;
 }
 
+/* Quick save profile section in sidebar */
+.save-profile-inline {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.sidebar-input {
+    flex: 1;
+    padding: 8px 10px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 12px;
+    transition: all 0.2s ease;
+}
+
+.sidebar-input:hover {
+    border-color: var(--primary-color);
+}
+
+.sidebar-input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.2);
+}
+
+.sidebar-input::placeholder {
+    color: var(--text-secondary);
+    opacity: 0.7;
+}
+
+.save-profile-inline .sidebar-btn {
+    width: auto;
+    padding: 8px 12px;
+    flex-shrink: 0;
+}
+
 /* Animation de clignotement pour le bouton Appliquer */
 @keyframes pulse-border {
     0%, 100% {
