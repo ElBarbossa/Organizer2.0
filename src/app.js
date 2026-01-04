@@ -1219,6 +1219,9 @@ function renderProfileList(profiles) {
     updateWindowsProfileSelector(profiles);
 }
 
+// Handler pour le changement de profil auto-load (stocké pour éviter les listeners multiples)
+let autoLoadProfileChangeHandler = null;
+
 // Update the auto-load profile selector with current profiles
 function updateAutoLoadProfileSelector(profiles) {
     const selectElement = document.getElementById('auto-load-profile-select');
@@ -1243,8 +1246,13 @@ function updateAutoLoadProfileSelector(profiles) {
         selectElement.appendChild(option);
     });
 
-    // Add event listener for changes
-    selectElement.addEventListener('change', (e) => {
+    // Retirer l'ancien listener s'il existe pour éviter les doublons
+    if (autoLoadProfileChangeHandler) {
+        selectElement.removeEventListener('change', autoLoadProfileChangeHandler);
+    }
+
+    // Créer et stocker le nouveau handler
+    autoLoadProfileChangeHandler = (e) => {
         const selectedProfile = e.target.value;
         if (selectedProfile) {
             localStorage.setItem('rustfocus_auto_load_profile', selectedProfile);
@@ -1255,7 +1263,10 @@ function updateAutoLoadProfileSelector(profiles) {
             autoLoadProfile = null;
             updateStatusText('Lancement automatique désactivé');
         }
-    });
+    };
+
+    // Add event listener for changes
+    selectElement.addEventListener('change', autoLoadProfileChangeHandler);
 }
 
 // Update the windows tab profile selector with current profiles
@@ -1785,8 +1796,8 @@ function configureHotkey(hotkeyId) {
             log('Touche configurée:', hotkeyId, '→', keyNames[key]);
             updateStatusText(`Touche configurée: ${keyNames[key]}. Cliquez sur "Appliquer" pour sauvegarder.`);
         } else {
-            log('Touche non supportée détectée:', key, e.code);
-            alert(`Touche non supportée: ${e.code}\n\nLa plupart des touches sont supportées (A-Z, 0-9, F1-F24, flèches, etc.).\nCette touche spécifique n'est pas reconnue.`);
+            log('Touche non supportée détectée:', key, event.code);
+            alert(`Touche non supportée: ${event.code}\n\nLa plupart des touches sont supportées (A-Z, 0-9, F1-F24, flèches, etc.).\nCette touche spécifique n'est pas reconnue.`);
             cancelHotkeyConfiguration();
         }
     };

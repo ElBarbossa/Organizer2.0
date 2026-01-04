@@ -74,26 +74,32 @@ fn focus_window(handle: isize) -> Result<(), String> {
 /// Update the window order (after drag-and-drop)
 #[tauri::command]
 fn update_window_order(state: tauri::State<AppState>, order: Vec<String>) -> Result<(), String> {
-    let mut profile = state.current_profile.lock();
-    if let Some(ref mut p) = *profile {
-        p.window_order = order.clone();
+    // Mise à jour du profil dans un bloc séparé pour libérer le verrou rapidement
+    // Cela évite de bloquer les hotkeys pendant le réordonnancement de la barre des tâches
+    {
+        let mut profile = state.current_profile.lock();
+        if let Some(ref mut p) = *profile {
+            p.window_order = order.clone();
 
-        // Auto-save current profile
-        state.profile_manager.lock()
-            .save_current_profile(p)
-            .map_err(|e| format!("Failed to save profile: {}", e))?;
-    } else {
-        // No current profile, create a temporary one with the order
-        // This allows hotkeys to work with the applied order even without a saved profile
-        let temp_profile = Profile {
-            name: "temp".to_string(),
-            window_order: order.clone(),
-            hotkeys: vec![],
-        };
-        *profile = Some(temp_profile);
+            // Auto-save current profile
+            state.profile_manager.lock()
+                .save_current_profile(p)
+                .map_err(|e| format!("Failed to save profile: {}", e))?;
+        } else {
+            // No current profile, create a temporary one with the order
+            // This allows hotkeys to work with the applied order even without a saved profile
+            let temp_profile = Profile {
+                name: "temp".to_string(),
+                window_order: order.clone(),
+                hotkeys: vec![],
+            };
+            *profile = Some(temp_profile);
+        }
+        // Le verrou est libéré ici à la fin du bloc
     }
 
     // Try to reorder taskbar windows (may not work on all Windows versions)
+    // Cette opération peut prendre 500ms+ mais ne bloque plus les hotkeys
     window_manager::reorder_taskbar_windows(order)
         .map_err(|e| format!("Failed to reorder taskbar: {}", e))?;
 
@@ -296,11 +302,20 @@ fn handle_hotkey_action(
                     debug_log!("DEBUG: Using profile window order: {:?}", profile.window_order);
 
                     // Find current position in the order
+                    // Étape 1: Trouver quelle fenêtre disponible est au premier plan
+                    // Étape 2: Trouver la position de son character_name dans l'ordre du profil
                     let current_pos = if let Some(fg_handle) = foreground_handle {
-                        // Find which window in the order is currently foreground
-                        profile.window_order.iter().position(|character_name| {
-                            available_windows.iter().any(|w| w.character_name == *character_name && w.handle == fg_handle)
-                        })
+                        // Trouver le character_name de la fenêtre au premier plan
+                        let foreground_character = available_windows.iter()
+                            .find(|w| w.handle == fg_handle)
+                            .map(|w| w.character_name.clone());
+
+                        // Trouver la position de ce personnage dans l'ordre du profil
+                        if let Some(char_name) = foreground_character {
+                            profile.window_order.iter().position(|name| *name == char_name)
+                        } else {
+                            None
+                        }
                     } else {
                         None
                     };
