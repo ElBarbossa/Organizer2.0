@@ -13,10 +13,13 @@ use windows::Win32::UI::WindowsAndMessaging::{
     HWND_TOP, AllowSetForegroundWindow, ShowWindow, SW_HIDE, SW_SHOW,
 };
 
-// Note: Toolbar messages kept for future reference if needed
-// const TB_BUTTONCOUNT: u32 = 0x0418;
-// const TB_GETBUTTON: u32 = 0x0417;
-// const TB_MOVEBUTTON: u32 = 0x0452;
+// Macro pour le logging conditionnel (uniquement en mode debug)
+macro_rules! debug_log {
+    ($($arg:tt)*) => {
+        #[cfg(debug_assertions)]
+        println!($($arg)*);
+    };
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DofusWindow {
@@ -68,7 +71,7 @@ unsafe extern "system" fn enum_windows_proc(hwnd: HWND, lparam: LPARAM) -> BOOL 
             .to_string();
 
         // Log all windows for debugging
-        println!("DEBUG Window: Class='{}', Handle={}", class_name, hwnd.0);
+        debug_log!("DEBUG Window: Class='{}', Handle={}", class_name, hwnd.0);
 
         // Check for UnityWndClass (current Dofus)
         if class_name != "UnityWndClass" {
@@ -84,7 +87,7 @@ unsafe extern "system" fn enum_windows_proc(hwnd: HWND, lparam: LPARAM) -> BOOL 
     let title_len = GetWindowTextW(hwnd, &mut title_buffer);
 
     if title_len == 0 {
-        println!("DEBUG: Skipping window {} - no title", hwnd.0);
+        debug_log!("DEBUG: Skipping window {} - no title", hwnd.0);
         return BOOL(1);
     }
 
@@ -92,19 +95,17 @@ unsafe extern "system" fn enum_windows_proc(hwnd: HWND, lparam: LPARAM) -> BOOL 
         .to_string_lossy()
         .to_string();
 
-    println!("DEBUG: Window {} has title: '{}'", hwnd.0, title);
+    debug_log!("DEBUG: Window {} has title: '{}'", hwnd.0, title);
 
     // Check if title contains "Dofus" (additional verification)
     // For some Dofus versions, the title format might be different
     // Temporarily accept any window with " - " in title (Dofus format)
     if !title.contains(" - ") {
-        println!("DEBUG: Skipping window {} - title '{}' doesn't contain dash separator", hwnd.0, title);
+        debug_log!("DEBUG: Skipping window {} - title '{}' doesn't contain dash separator", hwnd.0, title);
         return BOOL(1);
     }
 
-    println!("DEBUG: Window {} passed title check with title: '{}'", hwnd.0, title);
-
-    println!("DEBUG: Window {} passed title check", hwnd.0);
+    debug_log!("DEBUG: Window {} passed title check with title: '{}'", hwnd.0, title);
 
     // Verify it's actually a Dofus process
     let mut process_id = 0u32;
@@ -166,11 +167,11 @@ pub fn focus_window(handle: isize) -> Result<()> {
 /// 3. Show windows in order A, B, C (SW_SHOW) - adds back to taskbar in order
 /// Result: A, B, C in taskbar (left to right)
 pub fn reorder_taskbar_windows(order: Vec<String>) -> Result<()> {
-    println!("DEBUG: ========================================");
-    println!("DEBUG: Starting taskbar window reordering for {} windows", order.len());
+    debug_log!("DEBUG: ========================================");
+    debug_log!("DEBUG: Starting taskbar window reordering for {} windows", order.len());
 
     if order.is_empty() {
-        println!("DEBUG: No windows to reorder");
+        debug_log!("DEBUG: No windows to reorder");
         return Ok(());
     }
 
@@ -178,7 +179,7 @@ pub fn reorder_taskbar_windows(order: Vec<String>) -> Result<()> {
     let all_windows = detect_dofus_windows()?;
 
     if all_windows.is_empty() {
-        println!("DEBUG: No windows found to reorder");
+        debug_log!("DEBUG: No windows found to reorder");
         return Ok(());
     }
 
@@ -194,51 +195,51 @@ pub fn reorder_taskbar_windows(order: Vec<String>) -> Result<()> {
         if let Some(&handle) = window_map.get(character_name) {
             ordered_handles.push((character_name.clone(), handle));
         } else {
-            println!("DEBUG: Window not found for character: {}", character_name);
+            debug_log!("DEBUG: Window not found for character: {}", character_name);
         }
     }
 
     if ordered_handles.is_empty() {
-        println!("DEBUG: No matching windows found to reorder");
+        debug_log!("DEBUG: No matching windows found to reorder");
         return Ok(());
     }
 
-    println!("DEBUG: Found {} windows to reorder", ordered_handles.len());
-    println!("DEBUG: Desired order: {:?}", order);
-    println!("DEBUG: ========================================");
+    debug_log!("DEBUG: Found {} windows to reorder", ordered_handles.len());
+    debug_log!("DEBUG: Desired order: {:?}", order);
+    debug_log!("DEBUG: ========================================");
 
     unsafe {
         // NEW APPROACH: Hide all windows, then show in desired order
-        println!("DEBUG: STEP 1 - Hiding all windows to clear taskbar...");
+        debug_log!("DEBUG: STEP 1 - Hiding all windows to clear taskbar...");
 
         for (index, (name, handle)) in ordered_handles.iter().enumerate() {
             let hwnd = HWND(*handle);
             ShowWindow(hwnd, SW_HIDE);
-            println!("DEBUG: Hidden ({}/{}): {}", index + 1, ordered_handles.len(), name);
+            debug_log!("DEBUG: Hidden ({}/{}): {}", index + 1, ordered_handles.len(), name);
         }
 
         // Wait for Windows Shell to process the hide operations
-        println!("DEBUG: Waiting 250ms for Windows to process...");
+        debug_log!("DEBUG: Waiting 250ms for Windows to process...");
         std::thread::sleep(std::time::Duration::from_millis(250));
 
         // Show windows in the desired order (first to last)
         // Windows should add them to the taskbar in this order
-        println!("DEBUG: ========================================");
-        println!("DEBUG: STEP 2 - Showing windows in desired order...");
+        debug_log!("DEBUG: ========================================");
+        debug_log!("DEBUG: STEP 2 - Showing windows in desired order...");
 
         let current_pid = GetCurrentProcessId();
 
         for (index, (name, handle)) in ordered_handles.iter().enumerate() {
             let hwnd = HWND(*handle);
 
-            println!("DEBUG: Showing ({}/{}): {}", index + 1, ordered_handles.len(), name);
+            debug_log!("DEBUG: Showing ({}/{}): {}", index + 1, ordered_handles.len(), name);
             ShowWindow(hwnd, SW_SHOW);
 
             // For the first window, give it foreground to ensure it's fully visible
             if index == 0 {
                 let _ = AllowSetForegroundWindow(current_pid);
                 SetForegroundWindow(hwnd);
-                println!("DEBUG: Set first window {} as foreground", name);
+                debug_log!("DEBUG: Set first window {} as foreground", name);
             }
 
             // Small delay between each show to ensure Windows processes them in order
@@ -246,9 +247,9 @@ pub fn reorder_taskbar_windows(order: Vec<String>) -> Result<()> {
         }
     }
 
-    println!("DEBUG: ========================================");
-    println!("DEBUG: Taskbar window reordering completed");
-    println!("DEBUG: Windows should now be ordered in taskbar as: {:?}", order);
+    debug_log!("DEBUG: ========================================");
+    debug_log!("DEBUG: Taskbar window reordering completed");
+    debug_log!("DEBUG: Windows should now be ordered in taskbar as: {:?}", order);
     Ok(())
 }
 

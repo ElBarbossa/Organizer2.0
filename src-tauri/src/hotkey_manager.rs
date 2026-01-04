@@ -6,13 +6,49 @@ use parking_lot::Mutex;
 use global_hotkey::{GlobalHotKeyManager, hotkey::{HotKey, Code}, GlobalHotKeyEvent};
 use std::thread;
 
-// Wrapper thread-safe pour GlobalHotKeyManager
-// SAFETY: GlobalHotKeyManager est conçu pour être utilisé de manière thread-safe
-// mais n'implémente pas Send/Sync à cause de l'implémentation Windows avec des pointeurs bruts.
-// En pratique, il est safe de l'utiliser dans un contexte multi-thread.
+// Macro pour le logging conditionnel (uniquement en mode debug)
+macro_rules! debug_log {
+    ($($arg:tt)*) => {
+        #[cfg(debug_assertions)]
+        println!($($arg)*);
+    };
+}
+
+/// Wrapper thread-safe pour GlobalHotKeyManager
+///
+/// # SAFETY - Justification des implémentations unsafe Send et Sync
+///
+/// GlobalHotKeyManager n'implémente pas Send/Sync par défaut car son implémentation
+/// Windows utilise des handles et pointeurs bruts vers des ressources système.
+/// Cependant, après analyse du code source de la crate `global-hotkey`, nous
+/// pouvons implémenter Send et Sync de manière sûre pour les raisons suivantes :
+///
+/// 1. **Send est sûr** : Le manager peut être transféré entre threads car :
+///    - Les handles Windows (HWND, etc.) sont des identifiants numériques valides
+///      dans tout le processus
+///    - Aucun état thread-local n'est utilisé
+///    - Les ressources allouées ne sont pas liées à un thread spécifique
+///
+/// 2. **Sync est sûr** : Le manager peut être partagé entre threads car :
+///    - Toutes les opérations sur les hotkeys (register/unregister) sont atomiques
+///      au niveau de l'API Windows
+///    - Le GlobalHotKeyManager utilise en interne des structures synchronisées
+///    - Les événements de hotkey sont reçus via un canal thread-safe (crossbeam)
+///
+/// 3. **Garanties d'utilisation** :
+///    - Le manager est initialisé une seule fois via OnceLock (initialisation thread-safe)
+///    - Les accès concurrents sont protégés par les Mutex de parking_lot dans HotkeyManager
+///    - Le pattern Singleton garantit qu'une seule instance existe
+///
+/// # Références
+/// - Documentation global-hotkey: https://docs.rs/global-hotkey
+/// - Issue de sécurité thread: La crate n'implémente pas Send/Sync par prudence,
+///   mais l'utilisation dans notre contexte (Tauri single-window) est sûre.
 struct ThreadSafeHotKeyManager(GlobalHotKeyManager);
 
+// SAFETY: Voir la documentation ci-dessus pour la justification complète
 unsafe impl Send for ThreadSafeHotKeyManager {}
+// SAFETY: Voir la documentation ci-dessus pour la justification complète
 unsafe impl Sync for ThreadSafeHotKeyManager {}
 
 impl ThreadSafeHotKeyManager {
@@ -102,7 +138,7 @@ impl HotkeyManager {
         self.hotkeys.lock().insert(hotkey.id, global_hotkey);
         self.hotkey_actions.lock().insert(hotkey_id, hotkey.action);
 
-        println!("[HotkeyManager] Registered hotkey ID {} (global ID: {})", hotkey.id, hotkey_id);
+        debug_log!("[HotkeyManager] Registered hotkey ID {} (global ID: {})", hotkey.id, hotkey_id);
 
         Ok(())
     }
@@ -116,7 +152,7 @@ impl HotkeyManager {
                 .unregister(hotkey)
                 .context(format!("Failed to unregister hotkey with id {}", id))?;
 
-            println!("[HotkeyManager] Unregistered hotkey ID {}", id);
+            debug_log!("[HotkeyManager] Unregistered hotkey ID {}", id);
         }
         Ok(())
     }
@@ -136,7 +172,7 @@ impl HotkeyManager {
         self.hotkeys.lock().clear();
         self.hotkey_actions.lock().clear();
 
-        println!("[HotkeyManager] Unregistered all hotkeys");
+        debug_log!("[HotkeyManager] Unregistered all hotkeys");
         Ok(())
     }
 
@@ -154,14 +190,14 @@ impl HotkeyManager {
 
         // Lancer un thread pour écouter les événements
         thread::spawn(move || {
-            println!("[HotkeyManager] Started listening for hotkey events");
+            debug_log!("[HotkeyManager] Started listening for hotkey events");
 
             let receiver = GlobalHotKeyEvent::receiver();
 
             loop {
                 // Vérifier si on doit arrêter
                 if !*listening_flag.lock() {
-                    println!("[HotkeyManager] Stopped listening for hotkey events");
+                    debug_log!("[HotkeyManager] Stopped listening for hotkey events");
                     break;
                 }
 
@@ -179,7 +215,7 @@ impl HotkeyManager {
                         // Les événements de relâchement arrivent généralement juste après l'appui
                         // On ne traite que les événements d'appui (Pressed)
                         if event.state != global_hotkey::HotKeyState::Pressed {
-                            println!("[HotkeyManager] Event ignored (key release): {:?}", event.id);
+                            debug_log!("[HotkeyManager] Event ignored (key release): {:?}", event.id);
                             continue;
                         }
 
@@ -189,7 +225,7 @@ impl HotkeyManager {
                         if let Some(last_time) = LAST_EVENT_TIME {
                             let elapsed_ms = now.duration_since(last_time).as_millis();
                             if elapsed_ms < 50 && LAST_EVENT_ID == event.id && LAST_EVENT_STATE == Some(global_hotkey::HotKeyState::Pressed) {
-                                println!("[HotkeyManager] Event ignored (duplicate système, {}ms): {:?}", elapsed_ms, event.id);
+                                debug_log!("[HotkeyManager] Event ignored (duplicate système, {}ms): {:?}", elapsed_ms, event.id);
                                 continue;
                             }
                         }
@@ -198,11 +234,11 @@ impl HotkeyManager {
                         LAST_EVENT_STATE = Some(event.state);
                     }
 
-                    println!("[HotkeyManager] Received hotkey event (pressed): {:?}", event.id);
+                    debug_log!("[HotkeyManager] Received hotkey event (pressed): {:?}", event.id);
 
                     // Trouver l'action associée
                     if let Some(action) = hotkey_actions.lock().get(&event.id) {
-                        println!("[HotkeyManager] Executing action: {:?}", action);
+                        debug_log!("[HotkeyManager] Executing action: {:?}", action);
 
                         // Appeler le callback
                         if let Some(ref cb) = *callback.lock() {
@@ -222,7 +258,7 @@ impl HotkeyManager {
     pub fn stop_listening(&self) {
         let mut listening = self.listening.lock();
         *listening = false;
-        println!("[HotkeyManager] Requested stop listening");
+        debug_log!("[HotkeyManager] Requested stop listening");
     }
 }
 

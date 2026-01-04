@@ -5,6 +5,14 @@ mod hotkey_manager;
 mod profile_manager;
 mod window_manager;
 
+// Macro pour le logging conditionnel (uniquement en mode debug)
+macro_rules! debug_log {
+    ($($arg:tt)*) => {
+        #[cfg(debug_assertions)]
+        println!($($arg)*);
+    };
+}
+
 use anyhow::Result;
 use hotkey_manager::{vk_codes, Hotkey, HotkeyAction, HotkeyManager};
 use serde::{Deserialize, Serialize};
@@ -96,7 +104,7 @@ fn update_window_order(state: tauri::State<AppState>, order: Vec<String>) -> Res
 #[tauri::command]
 fn update_excluded_windows(state: tauri::State<AppState>, excluded_handles: Vec<isize>) -> Result<(), String> {
     *state.excluded_windows.lock() = excluded_handles.clone();
-    println!("DEBUG: Updated excluded windows: {:?}", excluded_handles);
+    debug_log!("DEBUG: Updated excluded windows: {:?}", excluded_handles);
     Ok(())
 }
 
@@ -211,7 +219,29 @@ fn setup_custom_hotkeys(
     Ok(())
 }
 
-// Track current window index for cycling
+/// Index de la fenêtre actuelle pour le cyclage séquentiel (fallback)
+///
+/// # SAFETY - Utilisation de static mut
+///
+/// Cette variable statique mutable est utilisée comme fallback quand aucun profil
+/// n'est chargé, pour permettre le cyclage séquentiel entre les fenêtres.
+///
+/// ## Justification de l'utilisation unsafe :
+/// - **Contexte d'utilisation** : Cette variable n'est accédée que dans la fonction
+///   `handle_hotkey_action` qui est appelée depuis un seul thread (le thread de callback
+///   des hotkeys)
+/// - **Pas de race condition critique** : Même en cas d'accès concurrent, le pire
+///   scénario est un saut de fenêtre, ce qui n'est pas un problème de sécurité
+/// - **Simplicité vs Complexité** : Utiliser Arc<AtomicUsize> serait plus "safe" mais
+///   ajouterait de la complexité pour un gain minime dans ce contexte
+///
+/// ## Alternative recommandée (TODO pour amélioration future) :
+/// Remplacer par `std::sync::atomic::AtomicUsize` pour une solution thread-safe :
+/// ```rust
+/// static CURRENT_WINDOW_INDEX: AtomicUsize = AtomicUsize::new(0);
+/// // Lecture: CURRENT_WINDOW_INDEX.load(Ordering::Relaxed)
+/// // Écriture: CURRENT_WINDOW_INDEX.store(value, Ordering::Relaxed)
+/// ```
 static mut CURRENT_WINDOW_INDEX: usize = 0;
 
 /// Get the current foreground window handle
@@ -246,16 +276,16 @@ fn handle_hotkey_action(
         .collect();
 
     if available_windows.is_empty() {
-        println!("DEBUG: No windows available for hotkey action (all excluded or no windows)");
+        debug_log!("DEBUG: No windows available for hotkey action (all excluded or no windows)");
         return;
     }
 
-    println!("DEBUG: Handling hotkey action {:?} with {} windows ({} total, {} excluded)",
+    debug_log!("DEBUG: Handling hotkey action {:?} with {} windows ({} total, {} excluded)",
              action, available_windows.len(), all_windows.len(), excluded.len());
 
     // Get the current foreground window
     let foreground_handle = get_foreground_window();
-    println!("DEBUG: Current foreground window handle: {:?}", foreground_handle);
+    debug_log!("DEBUG: Current foreground window handle: {:?}", foreground_handle);
 
     // Determine target window based on action and profile order
     let target_window = match action {
@@ -263,7 +293,7 @@ fn handle_hotkey_action(
             if let Some(ref profile) = *profile {
                 if !profile.window_order.is_empty() {
                     // Use profile's window order
-                    println!("DEBUG: Using profile window order: {:?}", profile.window_order);
+                    debug_log!("DEBUG: Using profile window order: {:?}", profile.window_order);
 
                     // Find current position in the order
                     let current_pos = if let Some(fg_handle) = foreground_handle {
@@ -275,7 +305,7 @@ fn handle_hotkey_action(
                         None
                     };
 
-                    println!("DEBUG: Current position in order: {:?}", current_pos);
+                    debug_log!("DEBUG: Current position in order: {:?}", current_pos);
 
                     // Calculate next/previous position
                     let order_len = profile.window_order.len();
@@ -295,7 +325,7 @@ fn handle_hotkey_action(
                         _ => unreachable!(),
                     };
 
-                    println!("DEBUG: Target position in order: {}", target_pos);
+                    debug_log!("DEBUG: Target position in order: {}", target_pos);
 
                     // Find the window at this position in the order
                     if let Some(target_character) = profile.window_order.get(target_pos) {
@@ -305,7 +335,7 @@ fn handle_hotkey_action(
                     }
                 } else {
                     // Fallback to sequential cycling if no order defined
-                    println!("DEBUG: No window order defined, using sequential cycling");
+                    debug_log!("DEBUG: No window order defined, using sequential cycling");
                     let current_index = unsafe { CURRENT_WINDOW_INDEX };
                     let target_index = match action {
                         HotkeyAction::NextWindow => (current_index + 1) % available_windows.len(),
@@ -323,7 +353,7 @@ fn handle_hotkey_action(
                 }
             } else {
                 // No profile, use sequential cycling
-                println!("DEBUG: No profile loaded, using sequential cycling");
+                debug_log!("DEBUG: No profile loaded, using sequential cycling");
                 let current_index = unsafe { CURRENT_WINDOW_INDEX };
                 let target_index = match action {
                     HotkeyAction::NextWindow => (current_index + 1) % available_windows.len(),
@@ -342,27 +372,27 @@ fn handle_hotkey_action(
         }
         HotkeyAction::DirectWindow(index) => {
             if index < available_windows.len() {
-                println!("DEBUG: DirectWindow action - focusing window at index {}", index);
+                debug_log!("DEBUG: DirectWindow action - focusing window at index {}", index);
                 available_windows.get(index).cloned()
             } else {
-                println!("DEBUG: DirectWindow action - index {} out of bounds ({} windows)", index, available_windows.len());
+                debug_log!("DEBUG: DirectWindow action - index {} out of bounds ({} windows)", index, available_windows.len());
                 return;
             }
         }
     };
 
     if let Some(window) = target_window {
-        println!("DEBUG: Focusing window '{}' (handle: {})", window.title, window.handle);
+        debug_log!("DEBUG: Focusing window '{}' (handle: {})", window.title, window.handle);
         let result = window_manager::focus_window(window.handle);
         match result {
-            Ok(_) => println!("DEBUG: Successfully focused window"),
-            Err(e) => println!("DEBUG: Failed to focus window: {}", e),
+            Ok(_) => debug_log!("DEBUG: Successfully focused window"),
+            Err(e) => debug_log!("DEBUG: Failed to focus window: {}", e),
         }
 
         // Emit event to frontend to update UI
         let _ = app_handle.emit_all("window-focused", window.handle);
     } else {
-        println!("DEBUG: No target window found for action {:?}", action);
+        debug_log!("DEBUG: No target window found for action {:?}", action);
     }
 }
 

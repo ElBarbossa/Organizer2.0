@@ -46,6 +46,94 @@ let currentProfileName = null; // Track current profile name
 let autoLoadProfile = localStorage.getItem('rustfocus_auto_load_profile') || null; // Profile to load on startup
 let excludedWindows = new Set(); // Track windows excluded from hotkeys
 
+// ============================================================================
+// CONVENTION DE NOMMAGE - IMPORTANT
+// ============================================================================
+// Le backend Rust utilise snake_case (ex: window_order, character_name)
+// Le frontend JavaScript utilise camelCase (ex: windowOrder, characterName)
+//
+// Lors de la lecture des données du backend:
+//   - profile.window_order (depuis Rust)
+// Lors du stockage dans localStorage:
+//   - config.windowOrder (convention JS)
+//
+// Cette différence est intentionnelle et respecte les conventions de chaque langage.
+// ============================================================================
+
+// ============================================================================
+// FONCTIONS UTILITAIRES DE GESTION DES PROFILS
+// ============================================================================
+
+/**
+ * Réordonne une liste de fenêtres selon un ordre de noms de personnages
+ * @param {Array} windows - Liste des fenêtres détectées
+ * @param {Array} orderList - Liste des noms de personnages dans l'ordre souhaité
+ * @returns {Array} - Liste des fenêtres réordonnées
+ */
+function reorderWindowsByCharacterNames(windows, orderList) {
+    if (!orderList || orderList.length === 0) {
+        return windows;
+    }
+
+    const orderedWindows = [];
+
+    // Ajouter les fenêtres dans l'ordre spécifié
+    for (const charName of orderList) {
+        const window = windows.find(w => w.character_name === charName);
+        if (window) {
+            orderedWindows.push(window);
+        }
+    }
+
+    // Ajouter les fenêtres non présentes dans l'ordre (nouvelles fenêtres)
+    for (const window of windows) {
+        if (!orderedWindows.find(w => w.handle === window.handle)) {
+            orderedWindows.push(window);
+        }
+    }
+
+    return orderedWindows;
+}
+
+/**
+ * Récupère l'ordre des fenêtres depuis le profil actuel
+ * Tente d'abord le backend, puis localStorage en fallback
+ * @param {string} profileName - Nom du profil
+ * @returns {Promise<Array|null>} - Liste des noms de personnages ou null
+ */
+async function getWindowOrderFromProfile(profileName) {
+    if (!profileName) return null;
+
+    // Essayer d'abord le backend
+    try {
+        const currentProfile = await invoke('get_current_profile');
+        // Note: Le backend retourne window_order (snake_case)
+        if (currentProfile && currentProfile.window_order && currentProfile.window_order.length > 0) {
+            log('Ordre récupéré depuis le backend:', currentProfile.window_order);
+            return currentProfile.window_order;
+        }
+    } catch (error) {
+        log('Impossible de récupérer le profil du backend, tentative localStorage');
+    }
+
+    // Fallback vers localStorage
+    try {
+        const saved = localStorage.getItem(`rustfocus_profile_${profileName}`);
+        if (saved) {
+            const config = JSON.parse(saved);
+            // Note: localStorage utilise windowOrder (camelCase)
+            if (config.windowOrder && config.windowOrder.length > 0) {
+                log('Ordre récupéré depuis localStorage:', config.windowOrder);
+                return config.windowOrder;
+            }
+        }
+    } catch (error) {
+        logError('Erreur lors de la lecture du profil depuis localStorage:', error);
+    }
+
+    return null;
+}
+
 // Mode Debug
 const DEBUG = true;
 
@@ -57,6 +145,33 @@ function log(...args) {
 
 function logError(...args) {
     console.error('[Organizer 2.0 ERROR]', ...args);
+}
+
+// Fonction utilitaire pour afficher et focaliser la fenêtre de l'application
+// Évite la duplication du code show/focus à travers l'application
+async function bringAppToFront() {
+    try {
+        log('Ramenant l\'application au premier plan...');
+        const appWindow = window.__TAURI__.window.getCurrent();
+        await appWindow.show();
+        await new Promise(resolve => setTimeout(resolve, 100));
+        await appWindow.unminimize();
+        await new Promise(resolve => setTimeout(resolve, 100));
+        await appWindow.setFocus();
+        log('Application ramenée au premier plan avec succès');
+        return true;
+    } catch (error) {
+        logError('Erreur lors du ramenage au premier plan:', error);
+        // Fallback via commande système
+        try {
+            await invoke('show_window');
+            log('Application affichée via commande système');
+            return true;
+        } catch (fallbackError) {
+            logError('Erreur du fallback:', fallbackError);
+            return false;
+        }
+    }
 }
 
 // Load application version from Tauri
@@ -195,25 +310,8 @@ async function init() {
 
     // Bring app to front after all initialization is complete
     setTimeout(async () => {
-        try {
-            log('Ramenant l\'application au premier plan après l\'initialisation...');
-            const appWindow = window.__TAURI__.window.getCurrent();
-            await appWindow.show();
-            await new Promise(resolve => setTimeout(resolve, 100));
-            await appWindow.unminimize();
-            await new Promise(resolve => setTimeout(resolve, 100));
-            await appWindow.setFocus();
-            log('Application ramenée au premier plan avec succès');
-        } catch (error) {
-            logError('Erreur lors du ramenage au premier plan:', error);
-            // Fallback
-            try {
-                await invoke('show_window');
-                log('Application affichée via commande système');
-            } catch (fallbackError) {
-                logError('Erreur du fallback aussi:', fallbackError);
-            }
-        }
+        log('Ramenant l\'application au premier plan après l\'initialisation...');
+        await bringAppToFront();
     }, 500); // Small delay to ensure everything is loaded
 
     // Listen for window focus events from backend
@@ -335,25 +433,7 @@ function setupEventListeners() {
             log('Ordre appliqué automatiquement à la barre des tâches');
 
             // Réafficher la fenêtre de l'application si elle était réduite
-            try {
-                log('Tentative de réaffichage de la fenêtre...');
-                const appWindow = window.__TAURI__.window.getCurrent();
-                await appWindow.show();
-                await new Promise(resolve => setTimeout(resolve, 100));
-                await appWindow.unminimize();
-                await new Promise(resolve => setTimeout(resolve, 100));
-                await appWindow.setFocus();
-                log('Fenêtre de l\'application réaffichée après chargement du profil');
-            } catch (error) {
-                logError('Erreur lors de la réaffichage de la fenêtre:', error);
-                // Fallback: utiliser les commandes système
-                try {
-                    await invoke('show_window');
-                    log('Fenêtre affichée via commande système');
-                } catch (fallbackError) {
-                    logError('Erreur du fallback aussi:', fallbackError);
-                }
-            }
+            await bringAppToFront();
 
             // Update selector to show the loaded profile
             selectElement.value = profileName;
@@ -467,101 +547,17 @@ async function loadWindows() {
         const windows = await invoke('detect_windows');
         log('Fenêtres détectées:', windows.length, windows);
 
-        // If we have a current profile, try to get its order from backend
+        // Utiliser les fonctions utilitaires pour récupérer l'ordre et réordonner
         if (currentProfileName) {
             log('Profil actuel détecté:', currentProfileName);
+            const orderList = await getWindowOrderFromProfile(currentProfileName);
 
-            try {
-                // Try to get the current profile from backend first
-                const currentProfile = await invoke('get_current_profile');
-                log('Profil récupéré du backend:', currentProfile);
-
-                if (currentProfile && currentProfile.window_order && currentProfile.window_order.length > 0) {
-                    log('Utilisation de l\'ordre du profil backend:', currentProfile.window_order);
-
-                    // Reorder windows based on backend profile order
-                    const orderedWindows = [];
-                    for (const charName of currentProfile.window_order) {
-                        const window = windows.find(w => w.character_name === charName);
-                        if (window) {
-                            orderedWindows.push(window);
-                            log('Fenêtre trouvée et ajoutée:', charName);
-                        } else {
-                            log('Fenêtre non trouvée dans l\'ordre du profil:', charName);
-                        }
-                    }
-                    // Add any windows not in the profile order
-                    for (const window of windows) {
-                        if (!orderedWindows.find(w => w.handle === window.handle)) {
-                            orderedWindows.push(window);
-                            log('Fenêtre supplémentaire ajoutée:', window.character_name);
-                        }
-                    }
-                    windowList = orderedWindows;
-                    log('Fenêtres réorganisées selon l\'ordre du profil backend. Nouvel ordre:', windowList.map(w => w.character_name));
-                } else {
-                    // Fallback to localStorage if backend doesn't have order
-                    log('Aucun ordre trouvé dans le profil backend, tentative avec localStorage');
-                    const saved = localStorage.getItem(`rustfocus_profile_${currentProfileName}`);
-                    if (saved) {
-                        const config = JSON.parse(saved);
-                        if (config.windowOrder && config.windowOrder.length > 0) {
-                            log('Ordre trouvé dans localStorage:', config.windowOrder);
-
-                            const orderedWindows = [];
-                            for (const charName of config.windowOrder) {
-                                const window = windows.find(w => w.character_name === charName);
-                                if (window) {
-                                    orderedWindows.push(window);
-                                }
-                            }
-                            // Add any windows not in the saved order
-                            for (const window of windows) {
-                                if (!orderedWindows.find(w => w.handle === window.handle)) {
-                                    orderedWindows.push(window);
-                                }
-                            }
-                            windowList = orderedWindows;
-                            log('Fenêtres réorganisées selon localStorage');
-                        } else {
-                            windowList = windows;
-                        }
-                    } else {
-                        windowList = windows;
-                    }
-                }
-            } catch (error) {
-                logError('Erreur lors de la récupération du profil backend:', error);
-                // Fallback to localStorage
-                const saved = localStorage.getItem(`rustfocus_profile_${currentProfileName}`);
-                if (saved) {
-                    try {
-                        const config = JSON.parse(saved);
-                        if (config.windowOrder && config.windowOrder.length > 0) {
-                            const orderedWindows = [];
-                            for (const charName of config.windowOrder) {
-                                const window = windows.find(w => w.character_name === charName);
-                                if (window) {
-                                    orderedWindows.push(window);
-                                }
-                            }
-                            for (const window of windows) {
-                                if (!orderedWindows.find(w => w.handle === window.handle)) {
-                                    orderedWindows.push(window);
-                                }
-                            }
-                            windowList = orderedWindows;
-                            log('Fenêtres réorganisées selon localStorage (fallback)');
-                        } else {
-                            windowList = windows;
-                        }
-                    } catch (localStorageError) {
-                        logError('Erreur localStorage aussi:', localStorageError);
-                        windowList = windows;
-                    }
-                } else {
-                    windowList = windows;
-                }
+            if (orderList) {
+                windowList = reorderWindowsByCharacterNames(windows, orderList);
+                log('Fenêtres réorganisées. Nouvel ordre:', windowList.map(w => w.character_name));
+            } else {
+                log('Aucun ordre trouvé, utilisation de l\'ordre par défaut');
+                windowList = windows;
             }
         } else {
             log('Aucun profil actuel, utilisation de l\'ordre par défaut');
@@ -1005,25 +1001,7 @@ async function applyWindowOrder() {
         toggleApplyOrderButton(false);
 
         // Réafficher la fenêtre de l'application si elle était réduite
-        try {
-            log('Tentative de réaffichage de la fenêtre...');
-            const appWindow = window.__TAURI__.window.getCurrent();
-            await appWindow.show();
-            await new Promise(resolve => setTimeout(resolve, 100)); // Petit délai
-            await appWindow.unminimize();
-            await new Promise(resolve => setTimeout(resolve, 100)); // Petit délai
-            await appWindow.setFocus();
-            log('Fenêtre de l\'application réaffichée après application de l\'ordre');
-        } catch (error) {
-            logError('Erreur lors de la réaffichage de la fenêtre:', error);
-            // Fallback: utiliser les commandes système
-            try {
-                await invoke('show_window');
-                log('Fenêtre affichée via commande système');
-            } catch (fallbackError) {
-                logError('Erreur du fallback aussi:', fallbackError);
-            }
-        }
+        await bringAppToFront();
 
         updateStatusText('Ordre appliqué - Barre des tâches réorganisée');
     } catch (error) {
@@ -1172,25 +1150,7 @@ function renderProfileList(profiles) {
                 toggleApplyOrderButton(false);
 
                 // Réafficher la fenêtre de l'application si elle était réduite
-                try {
-                    log('Tentative de réaffichage de la fenêtre...');
-                    const appWindow = window.__TAURI__.window.getCurrent();
-                    await appWindow.show();
-                    await new Promise(resolve => setTimeout(resolve, 100));
-                    await appWindow.unminimize();
-                    await new Promise(resolve => setTimeout(resolve, 100));
-                    await appWindow.setFocus();
-                    log('Fenêtre de l\'application réaffichée après chargement du profil');
-                } catch (error) {
-                    logError('Erreur lors de la réaffichage de la fenêtre:', error);
-                    // Fallback: utiliser les commandes système
-                    try {
-                        await invoke('show_window');
-                        log('Fenêtre affichée via commande système');
-                    } catch (fallbackError) {
-                        logError('Erreur du fallback aussi:', fallbackError);
-                    }
-                }
+                await bringAppToFront();
 
                 // Si on est sur l'onglet Fenêtres, mettre à jour l'affichage
                 if (document.querySelector('.tab-btn[data-tab="windows"]').classList.contains('active')) {
