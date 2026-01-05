@@ -9,9 +9,9 @@ use windows::Win32::System::Threading::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     EnumWindows, GetClassNameW, GetWindowTextW, GetWindowThreadProcessId, IsWindowVisible,
-    SetForegroundWindow, AllowSetForegroundWindow, ShowWindow, SW_HIDE, SW_SHOW,
+    SetForegroundWindow, AllowSetForegroundWindow, ShowWindow, SW_HIDE, SW_SHOW, SW_RESTORE,
     GetForegroundWindow, BringWindowToTop, SetWindowPos, HWND_TOPMOST, HWND_NOTOPMOST,
-    SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW,
+    SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, IsIconic,
 };
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP,
@@ -157,10 +157,11 @@ unsafe extern "system" fn enum_windows_proc(hwnd: HWND, lparam: LPARAM) -> BOOL 
 
 /// Force a window to the foreground, even when our app is not in foreground
 /// This uses multiple techniques to bypass Windows' foreground lock:
-/// 1. Simulate Alt key press to "unlock" the foreground
-/// 2. Attach thread input to the target window
-/// 3. Use SetWindowPos with TOPMOST flag temporarily
-/// 4. Call SetForegroundWindow
+/// 1. Restore window if minimized
+/// 2. Attach thread input to synchronize input queues
+/// 3. Simulate Alt key press to "unlock" the foreground
+/// 4. Use SetWindowPos with TOPMOST flag temporarily
+/// 5. BringWindowToTop + SetForegroundWindow
 fn force_foreground_window(hwnd: HWND) -> bool {
     unsafe {
         let current_thread_id = GetCurrentThreadId();
@@ -171,7 +172,20 @@ fn force_foreground_window(hwnd: HWND) -> bool {
         let current_pid = GetCurrentProcessId();
         let _ = AllowSetForegroundWindow(current_pid);
 
-        // Technique 1: Simulate Alt key press to unlock foreground
+        // Step 1: Restore window if it's minimized
+        if IsIconic(hwnd).as_bool() {
+            ShowWindow(hwnd, SW_RESTORE);
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+
+        // Step 2: Attach thread input FIRST (this is important for the Alt trick to work)
+        let attached = if target_thread_id != 0 && target_thread_id != current_thread_id {
+            AttachThreadInput(current_thread_id, target_thread_id, true).as_bool()
+        } else {
+            false
+        };
+
+        // Step 3: Simulate Alt key press to unlock foreground
         // This tricks Windows into thinking user interaction occurred
         let alt_input = INPUT {
             r#type: INPUT_KEYBOARD,
@@ -199,14 +213,7 @@ fn force_foreground_window(hwnd: HWND) -> bool {
         };
         SendInput(&[alt_input, alt_up_input], std::mem::size_of::<INPUT>() as i32);
 
-        // Technique 2: Attach thread input if different threads
-        let attached = if target_thread_id != 0 && target_thread_id != current_thread_id {
-            AttachThreadInput(current_thread_id, target_thread_id, true).as_bool()
-        } else {
-            false
-        };
-
-        // Technique 3: Temporarily make window topmost, then remove topmost
+        // Step 4: Temporarily make window topmost
         let _ = SetWindowPos(
             hwnd,
             HWND_TOPMOST,
@@ -214,11 +221,11 @@ fn force_foreground_window(hwnd: HWND) -> bool {
             SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW,
         );
 
-        // Bring to top and set foreground
+        // Step 5: Bring to top and set foreground
         let _ = BringWindowToTop(hwnd);
         let result = SetForegroundWindow(hwnd);
 
-        // Remove topmost flag to restore normal behavior
+        // Cleanup: Remove topmost flag to restore normal behavior
         let _ = SetWindowPos(
             hwnd,
             HWND_NOTOPMOST,
@@ -226,7 +233,7 @@ fn force_foreground_window(hwnd: HWND) -> bool {
             SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW,
         );
 
-        // Detach thread input if we attached it
+        // Cleanup: Detach thread input if we attached it
         if attached {
             let _ = AttachThreadInput(current_thread_id, target_thread_id, false);
         }
