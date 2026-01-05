@@ -79,6 +79,8 @@ impl ProfileManager {
     /// List all available profiles (excludes system profiles like "current" and "temp")
     pub fn list_profiles(&self) -> Result<Vec<String>> {
         let mut profiles = Vec::new();
+        // Liste des profils temporaires à exclure
+        let excluded_profiles = vec!["Current", "temp", "temporary"];
 
         if !self.profiles_dir.exists() {
             return Ok(profiles);
@@ -90,8 +92,8 @@ impl ProfileManager {
 
             if path.extension().and_then(|s| s.to_str()) == Some("json") {
                 if let Some(file_stem) = path.file_stem().and_then(|s| s.to_str()) {
-                    // Filter out system profiles that shouldn't appear in the user list
-                    if file_stem != "current" && file_stem != "temp" {
+                    // Filtrer les profils temporaires et les fichiers cachés (commençant par .)
+                    if !excluded_profiles.contains(&file_stem) && !file_stem.starts_with('.') {
                         profiles.push(file_stem.to_string());
                     }
                 }
@@ -114,7 +116,7 @@ impl ProfileManager {
 
     /// Get the path to the current profile (last used)
     pub fn get_current_profile_path(&self) -> PathBuf {
-        self.profiles_dir.join("current.json")
+        self.profiles_dir.join(".current_state.json")
     }
 
     /// Save the current profile (auto-save)
@@ -133,6 +135,17 @@ impl ProfileManager {
     /// Load the current profile (auto-load on startup)
     pub fn load_current_profile(&self) -> Result<Option<Profile>> {
         let file_path = self.get_current_profile_path();
+
+        // Migration: Si l'ancien fichier current.json existe, le migrer vers .current_state.json
+        let old_file_path = self.profiles_dir.join("current.json");
+        if old_file_path.exists() && !file_path.exists() {
+            println!("Migration: Déplacement de current.json vers .current_state.json");
+            if let Ok(json) = fs::read_to_string(&old_file_path) {
+                let _ = fs::write(&file_path, json);
+            }
+            // Supprimer l'ancien fichier
+            let _ = fs::remove_file(&old_file_path);
+        }
 
         if !file_path.exists() {
             return Ok(None);

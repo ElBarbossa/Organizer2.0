@@ -114,11 +114,17 @@ async function init() {
 
     // Check if there's a current profile loaded in the backend (Rust)
     let profileLoadedFromBackend = false;
+    const excludedProfiles = ['Current', 'temp', 'temporary'];
+
+    log('=== DÉMARRAGE: Vérification du profil ===');
+    log('Profil de lancement automatique configuré:', autoLoadProfile);
+
     try {
         const currentProfile = await invoke('get_current_profile');
         log('Profil actuel chargé côté Rust:', currentProfile);
 
-        if (currentProfile && currentProfile.name !== "temp") {
+        // Filtrer les profils temporaires
+        if (currentProfile && !excludedProfiles.includes(currentProfile.name)) {
             log('Synchronisation avec le profil chargé côté Rust:', currentProfile.name);
             currentProfileName = currentProfile.name;
             profileLoadedFromBackend = true;
@@ -151,24 +157,31 @@ async function init() {
     }
 
     // Auto-load profile on startup if configured (only if no profile is loaded from backend)
+    log('=== CHARGEMENT AUTOMATIQUE ===');
+    log('autoLoadProfile:', autoLoadProfile);
+    log('profileLoadedFromBackend:', profileLoadedFromBackend);
+
     if (autoLoadProfile && !profileLoadedFromBackend) {
-        log('Chargement automatique du profil au démarrage:', autoLoadProfile);
+        log('✓ Démarrage du chargement automatique du profil:', autoLoadProfile);
         try {
             // Load profile directly from localStorage (same as manual loading)
             await loadProfileWithHotkeys(autoLoadProfile);
             currentProfileName = autoLoadProfile;
+            log('✓ loadProfileWithHotkeys terminé');
 
             // Apply the profile's window order to the taskbar before loading windows
             const saved = localStorage.getItem(`rustfocus_profile_${autoLoadProfile}`);
             if (saved) {
                 const config = JSON.parse(saved);
+                log('Configuration du profil:', config);
                 if (config.windowOrder && config.windowOrder.length > 0) {
+                    log('Application de l\'ordre des fenêtres:', config.windowOrder);
                     await invoke('update_window_order', { order: config.windowOrder });
-                    log('Ordre du profil appliqué à la taskbar avant chargement des fenêtres');
+                    log('✓ Ordre du profil appliqué à la taskbar avant chargement des fenêtres');
                 }
             }
 
-            log('Profil chargé automatiquement depuis localStorage');
+            log('✓ Profil chargé automatiquement depuis localStorage');
 
             // Update profile display immediately after loading
             updateCurrentProfileDisplay(autoLoadProfile);
@@ -177,17 +190,71 @@ async function init() {
             await loadProfiles();
 
         } catch (error) {
-            logError('Échec du chargement automatique du profil:', error);
+            logError('❌ Échec du chargement automatique du profil:', error);
             // If auto-load fails, still load profiles list
             await loadProfiles();
         }
     } else {
+        log('⊘ Pas de chargement automatique (autoLoadProfile:', autoLoadProfile, ', profileLoadedFromBackend:', profileLoadedFromBackend, ')');
         // No auto-load, load profiles list normally
         await loadProfiles();
     }
 
     // Now load windows (after profile loading)
+    log('=== CHARGEMENT DES FENÊTRES ===');
     await loadWindows();
+    log('✓ loadWindows terminé, nombre de fenêtres:', windowList.length);
+
+    // Restaurer la fenêtre cible du travel automatique APRÈS le chargement des fenêtres
+    log('=== RESTAURATION TRAVEL AUTOMATIQUE AU DÉMARRAGE ===');
+    if (autoLoadProfile && !profileLoadedFromBackend) {
+        log('Tentative de restauration du travel automatique pour le profil:', autoLoadProfile);
+        const saved = localStorage.getItem(`rustfocus_profile_${autoLoadProfile}`);
+        if (saved) {
+            try {
+                const config = JSON.parse(saved);
+                log('Configuration du profil pour travel auto:', {
+                    autoTravelEnabled: config.autoTravelEnabled,
+                    autoTravelCharacterName: config.autoTravelCharacterName
+                });
+
+                // Restaurer l'état du travel automatique
+                const autoTravelCheckbox = document.getElementById('auto-travel-checkbox');
+                if (autoTravelCheckbox && config.autoTravelEnabled !== undefined) {
+                    autoTravelCheckbox.checked = config.autoTravelEnabled;
+                    if (config.autoTravelEnabled) {
+                        clipboardCheckInterval = setInterval(checkClipboardForTravel, 500);
+                    }
+                    log('✓ État du travel automatique restauré au démarrage:', config.autoTravelEnabled);
+                }
+
+                // Restaurer la fenêtre cible
+                if (config.autoTravelCharacterName) {
+                    const autoTravelWindowSelect = document.getElementById('space-paste-window-select');
+                    if (autoTravelWindowSelect) {
+                        log('Liste des fenêtres disponibles:', windowList.map(w => w.character_name));
+                        const targetWindow = windowList.find(w => w.character_name === config.autoTravelCharacterName);
+                        if (targetWindow) {
+                            autoTravelWindowSelect.value = targetWindow.handle;
+                            log('✓ Fenêtre cible du travel automatique restaurée au démarrage:', config.autoTravelCharacterName, '(handle:', targetWindow.handle, ')');
+                        } else {
+                            log('⚠ Fenêtre cible non trouvée:', config.autoTravelCharacterName);
+                        }
+                    } else {
+                        log('⚠ Élément select du travel automatique non trouvé');
+                    }
+                } else {
+                    log('Pas de fenêtre cible configurée dans le profil');
+                }
+            } catch (e) {
+                logError('❌ Erreur lors de la restauration du travel automatique au démarrage:', e);
+            }
+        } else {
+            log('⚠ Pas de configuration sauvegardée pour le profil:', autoLoadProfile);
+        }
+    } else {
+        log('⊘ Pas de restauration du travel automatique (pas de chargement automatique)');
+    }
 
     // Order is already applied in auto-load, no need to reapply
 
@@ -226,6 +293,20 @@ async function init() {
     setTimeout(() => {
         updateCurrentProfileDisplay(currentProfileName);
     }, 1500);
+
+    // Initialize auto-travel checkbox from localStorage
+    const autoTravelCheckbox = document.getElementById('auto-travel-checkbox');
+    if (autoTravelCheckbox) {
+        const autoTravelEnabled = localStorage.getItem('auto_travel_enabled') === 'true';
+        autoTravelCheckbox.checked = autoTravelEnabled;
+        autoTravelCheckbox.addEventListener('change', toggleAutoTravel);
+
+        // Start monitoring if enabled
+        if (autoTravelEnabled) {
+            toggleAutoTravel();
+        }
+        log('Auto-travel checkbox initialisée:', autoTravelEnabled);
+    }
 }
 
 // Setup tab navigation
@@ -291,6 +372,38 @@ function setupTabs() {
     });
 
     log('Configuration des onglets terminée avec succès');
+}
+
+// Switch between settings sections (for sidebar menu)
+function switchSettingsSection(sectionName) {
+    log('Changement de section de paramètres:', sectionName);
+
+    // Remove active class from all menu items
+    const menuItems = document.querySelectorAll('.settings-menu-item');
+    menuItems.forEach(item => {
+        item.classList.remove('active');
+    });
+
+    // Add active class to clicked menu item
+    const activeMenuItem = document.querySelector(`.settings-menu-item[data-section="${sectionName}"]`);
+    if (activeMenuItem) {
+        activeMenuItem.classList.add('active');
+    }
+
+    // Hide all content sections
+    const contentSections = document.querySelectorAll('.settings-content-section');
+    contentSections.forEach(section => {
+        section.classList.remove('active');
+    });
+
+    // Show the selected content section
+    const targetSection = document.getElementById(`section-${sectionName}`);
+    if (targetSection) {
+        targetSection.classList.add('active');
+        log('Section affichée:', `section-${sectionName}`);
+    } else {
+        logError('SECTION NON TROUVEE:', `section-${sectionName}`);
+    }
 }
 
 // Setup event listeners
@@ -673,6 +786,9 @@ function renderWindowList() {
     // Les event listeners drag sont maintenant gérés individuellement sur chaque élément
 
     log('Liste des fenêtres rendue:', windowList.length, 'éléments');
+
+    // Update space+paste window select dropdown
+    updateSpacePasteWindowSelect();
 }
 
 // Show/Hide Apply Order button
@@ -730,6 +846,117 @@ function moveWindowDown(index) {
 
     // Re-render the list
     renderWindowList();
+}
+
+// Update the window select dropdown for space+paste feature
+function updateSpacePasteWindowSelect() {
+    const select = document.getElementById('space-paste-window-select');
+    if (!select) return;
+
+    // Clear existing options except the first one
+    select.innerHTML = '<option value="">Sélectionnez une fenêtre...</option>';
+
+    // Add an option for each window
+    windowList.forEach((window, index) => {
+        const option = document.createElement('option');
+        option.value = window.handle;
+        option.textContent = `${index + 1}. ${window.character_name}`;
+        select.appendChild(option);
+    });
+
+    log('Dropdown space+paste mis à jour avec', windowList.length, 'fenêtres');
+}
+
+// Variables for clipboard monitoring
+let lastClipboardContent = '';
+let clipboardCheckInterval = null;
+
+// Send space + paste + enter sequence to selected window
+async function sendSpacePasteEnter(withFocus) {
+    const select = document.getElementById('space-paste-window-select');
+    const selectedHandle = select.value;
+
+    if (!selectedHandle) {
+        alert('Veuillez sélectionner une fenêtre cible');
+        return;
+    }
+
+    try {
+        log('Envoi de la séquence espace+coller+entrée à la fenêtre:', selectedHandle, 'avec focus:', withFocus);
+        await invoke('send_space_paste_enter', {
+            handle: parseInt(selectedHandle),
+            withFocus: withFocus
+        });
+        log('Séquence espace+coller+entrée envoyée avec succès');
+
+        // Show success feedback
+        const btn = withFocus ? document.getElementById('send-space-paste-btn') : document.getElementById('send-space-paste-test-btn');
+        const originalText = btn.textContent;
+        btn.textContent = '✅ Envoyé !';
+        btn.disabled = true;
+
+        setTimeout(() => {
+            btn.textContent = originalText;
+            btn.disabled = false;
+        }, 2000);
+    } catch (error) {
+        logError('Erreur lors de l\'envoi de la séquence:', error);
+        alert(`Erreur: ${error}`);
+    }
+}
+
+// Check clipboard for /travel and auto-send
+async function checkClipboardForTravel() {
+    try {
+        // Use Tauri clipboard API instead of navigator.clipboard
+        const clipboardText = await invoke('read_clipboard');
+
+        // Check if clipboard changed and contains /travel
+        if (clipboardText !== lastClipboardContent && clipboardText.includes('/travel')) {
+            log('Détection de /travel dans le presse-papier:', clipboardText);
+            lastClipboardContent = clipboardText;
+
+            // Get selected window
+            const select = document.getElementById('space-paste-window-select');
+            const selectedHandle = select.value;
+
+            if (selectedHandle) {
+                log('Envoi automatique de la séquence pour /travel');
+                await invoke('send_space_paste_enter', {
+                    handle: parseInt(selectedHandle),
+                    withFocus: false  // Don't focus for auto-send
+                });
+                log('Séquence /travel envoyée automatiquement');
+            } else {
+                log('Aucune fenêtre sélectionnée pour l\'envoi automatique');
+            }
+        } else if (clipboardText !== lastClipboardContent) {
+            // Update last content even if it doesn't contain /travel
+            lastClipboardContent = clipboardText;
+        }
+    } catch (error) {
+        // Ignore clipboard access errors (happens when clipboard is empty)
+        // This is normal and expected
+    }
+}
+
+// Toggle auto-travel monitoring
+function toggleAutoTravel() {
+    const checkbox = document.getElementById('auto-travel-checkbox');
+
+    if (checkbox.checked) {
+        log('Activation de la surveillance du presse-papier pour /travel');
+        // Check clipboard every 500ms
+        clipboardCheckInterval = setInterval(checkClipboardForTravel, 500);
+        localStorage.setItem('auto_travel_enabled', 'true');
+    } else {
+        log('Désactivation de la surveillance du presse-papier');
+        if (clipboardCheckInterval) {
+            clearInterval(clipboardCheckInterval);
+            clipboardCheckInterval = null;
+        }
+        localStorage.setItem('auto_travel_enabled', 'false');
+    }
 }
 
 // Custom Drag and Drop handlers (compatible with Tauri/WebView2)
@@ -1092,11 +1319,14 @@ async function setupHotkeys() {
 async function loadProfiles() {
     log('Chargement des profils...');
     let profiles = [];
-    const systemProfiles = ['current', 'temp']; // Profils système à exclure
+    // Liste des profils à exclure (profils temporaires/système)
+    const excludedProfiles = ['Current', 'temp', 'temporary', 'current'];
 
     try {
         profiles = await invoke('list_profiles');
         log('Profils chargés depuis Rust:', profiles.length, profiles);
+        // Filtrer les profils temporaires de Rust
+        profiles = profiles.filter(p => !excludedProfiles.includes(p));
     } catch (error) {
         logError('Échec du chargement des profils depuis Rust, utilisation de localStorage uniquement:', error);
         profiles = [];
@@ -1108,7 +1338,7 @@ async function loadProfiles() {
 
     // Merge profiles from Rust and localStorage, filtering out system profiles
     const allProfiles = [...new Set([...profiles, ...localProfiles.map(p => p.name)])]
-        .filter(name => !systemProfiles.includes(name));
+        .filter(name => !excludedProfiles.includes(name));
     log('Profils fusionnés:', allProfiles.length, allProfiles);
 
     renderProfileList(allProfiles);
@@ -1160,6 +1390,26 @@ function renderProfileList(profiles) {
                 // IMPORTANT: Recharger les fenêtres APRÈS avoir chargé le profil pour appliquer l'ordre sauvegardé
                 log('Rechargement des fenêtres après chargement du profil...');
                 await loadWindows();
+
+                // Restaurer la fenêtre cible du travel automatique APRÈS que les fenêtres soient chargées
+                const savedConfig = localStorage.getItem(`rustfocus_profile_${name}`);
+                if (savedConfig) {
+                    try {
+                        const config = JSON.parse(savedConfig);
+                        if (config.autoTravelCharacterName) {
+                            const autoTravelWindowSelect = document.getElementById('space-paste-window-select');
+                            if (autoTravelWindowSelect) {
+                                const targetWindow = windowList.find(w => w.character_name === config.autoTravelCharacterName);
+                                if (targetWindow) {
+                                    autoTravelWindowSelect.value = targetWindow.handle;
+                                    log('✓ Fenêtre cible du travel automatique restaurée après chargement des fenêtres:', config.autoTravelCharacterName);
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        log('Erreur lors de la restauration de la fenêtre cible:', e);
+                    }
+                }
 
                 // Apply the loaded order to the taskbar immediately
                 const characterNames = windowList.map(w => w.character_name);
@@ -1227,20 +1477,35 @@ function renderProfileList(profiles) {
 
                 log('Suppression confirmée, suppression du profil:', name);
 
-                // Delete from localStorage only (since Rust backend fails)
-                localStorage.removeItem(`rustfocus_profile_${name}`);
-                log('Profil supprimé de localStorage');
+                // Supprimer des deux côtés en parallèle
+                const deletePromises = [];
+
+                // Suppression de localStorage
+                deletePromises.push(
+                    Promise.resolve().then(() => {
+                        localStorage.removeItem(`rustfocus_profile_${name}`);
+                        log('Profil supprimé de localStorage');
+                    })
+                );
+
+                // Suppression côté Rust
+                deletePromises.push(
+                    invoke('delete_profile', { name })
+                        .then(() => {
+                            log('Profil supprimé côté Rust (succès)');
+                        })
+                        .catch(rustError => {
+                            log('Note: Suppression côté Rust a échoué, mais localStorage a été nettoyé');
+                        })
+                );
+
+                // Attendre que les deux suppressions soient terminées
+                await Promise.all(deletePromises);
 
                 updateStatusText(`Profil "${name}" supprimé`);
-                await loadProfiles();
 
-                // Try Rust backend but don't fail if it doesn't work
-                try {
-                    await invoke('delete_profile', { name });
-                    log('Profil supprimé côté Rust (succès)');
-                } catch (rustError) {
-                    log('Note: Suppression côté Rust a échoué, mais localStorage a été nettoyé');
-                }
+                // Recharger la liste APRÈS que les deux suppressions soient terminées
+                await loadProfiles();
             } catch (error) {
                 logError('Échec de la suppression du profil:', error);
                 alert(`Échec de la suppression du profil: ${error}`);
@@ -1283,19 +1548,25 @@ function updateAutoLoadProfileSelector(profiles) {
         selectElement.appendChild(option);
     });
 
-    // Add event listener for changes
-    selectElement.addEventListener('change', (e) => {
-        const selectedProfile = e.target.value;
-        if (selectedProfile) {
-            localStorage.setItem('rustfocus_auto_load_profile', selectedProfile);
-            autoLoadProfile = selectedProfile;
-            updateStatusText(`Profil "${selectedProfile}" défini comme lancement automatique`);
-        } else {
-            localStorage.removeItem('rustfocus_auto_load_profile');
-            autoLoadProfile = null;
-            updateStatusText('Lancement automatique désactivé');
-        }
-    });
+    // Add event listener for changes (only once)
+    if (!selectElement.hasAttribute('data-listener-attached')) {
+        selectElement.setAttribute('data-listener-attached', 'true');
+        selectElement.addEventListener('change', (e) => {
+            const selectedProfile = e.target.value;
+            log('Changement de profil de lancement automatique:', selectedProfile);
+            if (selectedProfile) {
+                localStorage.setItem('rustfocus_auto_load_profile', selectedProfile);
+                autoLoadProfile = selectedProfile;
+                log('✓ Profil de lancement automatique défini:', selectedProfile);
+                updateStatusText(`Profil "${selectedProfile}" défini comme lancement automatique`);
+            } else {
+                localStorage.removeItem('rustfocus_auto_load_profile');
+                autoLoadProfile = null;
+                log('✓ Lancement automatique désactivé');
+                updateStatusText('Lancement automatique désactivé');
+            }
+        });
+    }
 }
 
 // Update the windows tab profile selector with current profiles
@@ -1438,6 +1709,13 @@ async function saveProfileWithHotkeys(profileName) {
     log('Sauvegarde du profil avec configuration des touches:', profileName);
     log('Ordre actuel des fenêtres:', windowList.map(w => w.character_name));
 
+    // Ne pas sauvegarder les profils temporaires/système
+    const excludedProfiles = ['Current', 'temp', 'temporary'];
+    if (excludedProfiles.includes(profileName)) {
+        log('⚠ Tentative de sauvegarde d\'un profil temporaire ignorée:', profileName);
+        return;
+    }
+
     // Vérifier si le profil existe déjà pour préserver ses données
     const existingProfile = localStorage.getItem(`rustfocus_profile_${profileName}`);
     let existingConfig = null;
@@ -1451,12 +1729,28 @@ async function saveProfileWithHotkeys(profileName) {
         }
     }
 
+    // Récupérer l'état du travel automatique
+    const autoTravelCheckbox = document.getElementById('auto-travel-checkbox');
+    const autoTravelWindowSelect = document.getElementById('space-paste-window-select');
+
+    // Trouver le nom du personnage correspondant au handle sélectionné
+    let autoTravelCharacterName = '';
+    if (autoTravelWindowSelect && autoTravelWindowSelect.value) {
+        const selectedHandle = parseInt(autoTravelWindowSelect.value);
+        const selectedWindow = windowList.find(w => w.handle === selectedHandle);
+        if (selectedWindow) {
+            autoTravelCharacterName = selectedWindow.character_name;
+        }
+    }
+
     // Sauvegarder la configuration dans localStorage pour persistance
     // On ne met à jour que CE profil spécifique, pas tous les autres
     const configToSave = {
         profileName,
         hotkeyConfig: hotkeyConfig,
         windowOrder: windowList.map(w => w.character_name), // Ordre actuel des fenêtres
+        autoTravelEnabled: autoTravelCheckbox ? autoTravelCheckbox.checked : false,
+        autoTravelCharacterName: autoTravelCharacterName, // Nom du personnage au lieu du handle
         timestamp: Date.now()
     };
 
@@ -1566,6 +1860,35 @@ async function loadProfileWithHotkeys(profileName) {
             } else {
                 log('Aucun ordre de fenêtres trouvé dans le profil');
             }
+
+            // Restaurer l'état du travel automatique
+            const autoTravelCheckbox = document.getElementById('auto-travel-checkbox');
+            const autoTravelWindowSelect = document.getElementById('space-paste-window-select');
+
+            if (autoTravelCheckbox && config.autoTravelEnabled !== undefined) {
+                autoTravelCheckbox.checked = config.autoTravelEnabled;
+                // Déclencher l'activation/désactivation du mode auto
+                if (config.autoTravelEnabled) {
+                    clipboardCheckInterval = setInterval(checkClipboardForTravel, 500);
+                } else {
+                    if (clipboardCheckInterval) {
+                        clearInterval(clipboardCheckInterval);
+                    }
+                }
+                log('✓ État du travel automatique restauré:', config.autoTravelEnabled);
+            }
+
+            // Restaurer la fenêtre cible en cherchant par nom de personnage
+            if (autoTravelWindowSelect && config.autoTravelCharacterName) {
+                // Trouver le handle correspondant au nom du personnage
+                const targetWindow = windowList.find(w => w.character_name === config.autoTravelCharacterName);
+                if (targetWindow) {
+                    autoTravelWindowSelect.value = targetWindow.handle;
+                    log('✓ Fenêtre cible du travel automatique restaurée:', config.autoTravelCharacterName, '(handle:', targetWindow.handle, ')');
+                } else {
+                    log('⚠ Fenêtre cible du travel non trouvée:', config.autoTravelCharacterName);
+                }
+            }
         } catch (error) {
             logError('Erreur lors du parsing de la configuration:', error);
         }
@@ -1590,15 +1913,16 @@ async function loadProfileWithHotkeys(profileName) {
 // Lister les profils avec leurs infos (exclut les profils système comme "current" et "temp")
 function listSavedProfiles() {
     const profiles = [];
-    const systemProfiles = ['current', 'temp']; // Profils système à exclure
+    // Liste des profils à exclure (profils temporaires/système)
+    const excludedProfiles = ['Current', 'temp', 'temporary', 'current'];
 
     for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
         if (key && key.startsWith('rustfocus_profile_')) {
             const profileName = key.replace('rustfocus_profile_', '');
 
-            // Filtrer les profils système
-            if (systemProfiles.includes(profileName)) {
+            // Exclure les profils temporaires
+            if (excludedProfiles.includes(profileName)) {
                 continue;
             }
 

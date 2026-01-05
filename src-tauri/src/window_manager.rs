@@ -11,7 +11,17 @@ use windows::Win32::UI::WindowsAndMessaging::{
     EnumWindows, GetClassNameW, GetWindowTextW, GetWindowThreadProcessId, IsWindowVisible,
     SetForegroundWindow, SetWindowPos, SWP_NOMOVE, SWP_NOSIZE,
     HWND_TOP, AllowSetForegroundWindow, ShowWindow, SW_HIDE, SW_SHOW,
+    GetForegroundWindow,
 };
+use windows::Win32::UI::Input::KeyboardAndMouse::{
+    SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP,
+    KEYBD_EVENT_FLAGS, VIRTUAL_KEY, VK_SPACE, VK_CONTROL, VK_V, VK_RETURN,
+    KEYEVENTF_SCANCODE, MapVirtualKeyW, MAPVK_VK_TO_VSC,
+};
+use windows::Win32::System::Threading::{
+    AttachThreadInput, GetCurrentThreadId,
+};
+use windows::Win32::Foundation::GetLastError;
 
 // Note: Toolbar messages kept for future reference if needed
 // const TB_BUTTONCOUNT: u32 = 0x0418;
@@ -249,6 +259,184 @@ pub fn reorder_taskbar_windows(order: Vec<String>) -> Result<()> {
     println!("DEBUG: ========================================");
     println!("DEBUG: Taskbar window reordering completed");
     println!("DEBUG: Windows should now be ordered in taskbar as: {:?}", order);
+    Ok(())
+}
+
+/// Helper function to create a keyboard input event with scan code
+/// Using scan codes makes the input more "realistic" for games like Dofus
+fn create_key_input(vk: VIRTUAL_KEY, flags: KEYBD_EVENT_FLAGS) -> INPUT {
+    unsafe {
+        // Get the scan code from the virtual key
+        let scan_code = MapVirtualKeyW(vk.0 as u32, MAPVK_VK_TO_VSC) as u16;
+
+        INPUT {
+            r#type: INPUT_KEYBOARD,
+            Anonymous: INPUT_0 {
+                ki: KEYBDINPUT {
+                    wVk: vk,
+                    wScan: scan_code,
+                    dwFlags: flags,
+                    time: 0,
+                    dwExtraInfo: 0,
+                },
+            },
+        }
+    }
+}
+
+/// Send a key sequence (Space + Paste + Enter + Enter) to a specific window
+/// Sequence: Space → Ctrl+V → Enter (send command) → Wait → Enter (validate popup)
+/// Always focuses the target window (required for SendInput)
+pub fn send_space_paste_enter_to_window(handle: isize, with_focus: bool) -> Result<()> {
+    println!("DEBUG: Sending space + paste + enter + enter sequence to window {} (with_focus: {})", handle, with_focus);
+
+    unsafe {
+        let hwnd = HWND(handle);
+
+        // Always focus the target window (required for SendInput to work)
+        // Try multiple times to ensure the window is actually focused
+        let mut focus_success = false;
+        for attempt in 0..3 {
+            let fg_hwnd = GetForegroundWindow();
+            if fg_hwnd.0 == handle {
+                println!("DEBUG: Window already in foreground");
+                focus_success = true;
+                break;
+            }
+
+            println!("DEBUG: Attempt {}/3 - Window not in foreground, attempting to focus...", attempt + 1);
+
+            let mut target_thread_id = 0u32;
+            GetWindowThreadProcessId(hwnd, Some(&mut target_thread_id));
+            let current_thread_id = GetCurrentThreadId();
+
+            if target_thread_id != 0 && target_thread_id != current_thread_id {
+                let _ = AttachThreadInput(current_thread_id, target_thread_id, true);
+                SetForegroundWindow(hwnd);
+                let _ = AttachThreadInput(current_thread_id, target_thread_id, false);
+            } else {
+                SetForegroundWindow(hwnd);
+            }
+
+            // Wait a bit for the window to actually come to foreground
+            std::thread::sleep(std::time::Duration::from_millis(200));
+
+            // Verify if focus was successful
+            let fg_hwnd = GetForegroundWindow();
+            if fg_hwnd.0 == handle {
+                println!("DEBUG: Successfully focused window on attempt {}", attempt + 1);
+                focus_success = true;
+                break;
+            } else {
+                println!("DEBUG: Focus failed on attempt {}. FG: {}, Target: {}", attempt + 1, fg_hwnd.0, handle);
+            }
+        }
+
+        // Final verification - fail if window is not in foreground
+        if !focus_success {
+            let fg_hwnd = GetForegroundWindow();
+            println!("ERROR: Failed to focus window after 3 attempts. FG: {}, Target: {}", fg_hwnd.0, handle);
+            return Err(anyhow::anyhow!("Failed to bring window to foreground after multiple attempts. Current foreground: {}, Target: {}", fg_hwnd.0, handle));
+        }
+
+        // Envoi de la touche Espace avec scan code
+        println!("DEBUG: Sending SPACE key with scan code...");
+        let space_scan = MapVirtualKeyW(VK_SPACE.0 as u32, MAPVK_VK_TO_VSC);
+        println!("DEBUG: VK_SPACE=0x{:X}, Scan code=0x{:X}", VK_SPACE.0, space_scan);
+
+        let space_inputs = [
+            create_key_input(VK_SPACE, KEYBD_EVENT_FLAGS(0)), // Appui
+            create_key_input(VK_SPACE, KEYEVENTF_KEYUP),      // Relâchement
+        ];
+
+        let sent = SendInput(&space_inputs, std::mem::size_of::<INPUT>() as i32);
+        if sent == 0 {
+            let error = GetLastError();
+            println!("ERROR: Failed to send space input. Error code: {:?}", error);
+            return Err(anyhow::anyhow!("Failed to send space input. Error: {:?}", error));
+        }
+        println!("DEBUG: Space sent, {} events processed", sent);
+
+        std::thread::sleep(std::time::Duration::from_millis(100));
+
+        // Envoi de Ctrl+V avec délais individuels pour garantir la détection
+        println!("DEBUG: Sending CTRL+V (paste) with individual delays...");
+
+        // Press Ctrl
+        let sent = SendInput(&[create_key_input(VK_CONTROL, KEYBD_EVENT_FLAGS(0))], std::mem::size_of::<INPUT>() as i32);
+        if sent == 0 {
+            let error = GetLastError();
+            println!("ERROR: Failed to send Ctrl down. Error code: {:?}", error);
+            return Err(anyhow::anyhow!("Failed to send Ctrl down. Error: {:?}", error));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(30));
+
+        // Press V (while Ctrl is held)
+        let sent = SendInput(&[create_key_input(VK_V, KEYBD_EVENT_FLAGS(0))], std::mem::size_of::<INPUT>() as i32);
+        if sent == 0 {
+            let error = GetLastError();
+            println!("ERROR: Failed to send V down. Error code: {:?}", error);
+            return Err(anyhow::anyhow!("Failed to send V down. Error: {:?}", error));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(30));
+
+        // Release V
+        let sent = SendInput(&[create_key_input(VK_V, KEYEVENTF_KEYUP)], std::mem::size_of::<INPUT>() as i32);
+        if sent == 0 {
+            let error = GetLastError();
+            println!("ERROR: Failed to send V up. Error code: {:?}", error);
+            return Err(anyhow::anyhow!("Failed to send V up. Error: {:?}", error));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(30));
+
+        // Release Ctrl
+        let sent = SendInput(&[create_key_input(VK_CONTROL, KEYEVENTF_KEYUP)], std::mem::size_of::<INPUT>() as i32);
+        if sent == 0 {
+            let error = GetLastError();
+            println!("ERROR: Failed to send Ctrl up. Error code: {:?}", error);
+            return Err(anyhow::anyhow!("Failed to send Ctrl up. Error: {:?}", error));
+        }
+        println!("DEBUG: Ctrl+V sent successfully with {} total events", 4);
+
+        // Wait before sending Enter
+        std::thread::sleep(std::time::Duration::from_millis(50));
+
+        // Send first Enter key (to send the /travel command)
+        println!("DEBUG: Sending first ENTER key (send command)...");
+        let enter_inputs = [
+            create_key_input(VK_RETURN, KEYBD_EVENT_FLAGS(0)), // Appui
+            create_key_input(VK_RETURN, KEYEVENTF_KEYUP),      // Relâchement
+        ];
+
+        let sent = SendInput(&enter_inputs, std::mem::size_of::<INPUT>() as i32);
+        if sent == 0 {
+            let error = GetLastError();
+            println!("ERROR: Failed to send first enter input. Error code: {:?}", error);
+            return Err(anyhow::anyhow!("Failed to send first enter input. Error: {:?}", error));
+        }
+        println!("DEBUG: First Enter sent, {} events processed", sent);
+
+        // Wait for popup to appear
+        std::thread::sleep(std::time::Duration::from_millis(300));
+
+        // Send second Enter key (to validate the popup)
+        println!("DEBUG: Sending second ENTER key (validate popup)...");
+        let enter_inputs_2 = [
+            create_key_input(VK_RETURN, KEYBD_EVENT_FLAGS(0)), // Appui
+            create_key_input(VK_RETURN, KEYEVENTF_KEYUP),      // Relâchement
+        ];
+
+        let sent = SendInput(&enter_inputs_2, std::mem::size_of::<INPUT>() as i32);
+        if sent == 0 {
+            let error = GetLastError();
+            println!("ERROR: Failed to send second enter input. Error code: {:?}", error);
+            return Err(anyhow::anyhow!("Failed to send second enter input. Error: {:?}", error));
+        }
+        println!("DEBUG: Second Enter sent, {} events processed", sent);
+
+        println!("DEBUG: Space + paste + enter + enter sequence completed successfully");
+    }
+
     Ok(())
 }
 

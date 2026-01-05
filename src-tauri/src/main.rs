@@ -428,14 +428,34 @@ fn show_window(app_handle: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// Send space + paste + enter + enter key sequence to a specific window
+/// Sequence: Space → Ctrl+V → Enter (send command) → Wait 500ms → Enter (validate popup)
+/// Always focuses the target window and keeps it in foreground
+#[tauri::command]
+fn send_space_paste_enter(handle: isize, with_focus: bool) -> Result<(), String> {
+    window_manager::send_space_paste_enter_to_window(handle, with_focus)
+        .map_err(|e| format!("Failed to send space + paste + enter + enter: {}", e))
+}
+
+/// Read clipboard content
+#[tauri::command]
+fn read_clipboard(app_handle: AppHandle) -> Result<String, String> {
+    use tauri::ClipboardManager;
+
+    app_handle
+        .clipboard_manager()
+        .read_text()
+        .map_err(|e| format!("Failed to read clipboard: {}", e))
+        .and_then(|opt| opt.ok_or_else(|| "Clipboard is empty".to_string()))
+}
+
 fn main() {
     // Initialize app state
     let state = AppState::new().expect("Failed to initialize app state");
 
-    // Load current profile if it exists
-    if let Ok(Some(profile)) = state.profile_manager.lock().load_current_profile() {
-        *state.current_profile.lock() = Some(profile);
-    }
+    // Note: Ne pas charger automatiquement le profil au démarrage.
+    // Le chargement automatique est géré par JavaScript via localStorage (rustfocus_auto_load_profile).
+    // Le fichier .current_state.json sert uniquement à sauvegarder l'état actuel, pas à le restaurer.
 
     // Create system tray menu
     let tray_menu = SystemTrayMenu::new()
@@ -480,6 +500,8 @@ fn main() {
             list_profiles,
             delete_profile,
             show_window,
+            send_space_paste_enter,
+            read_clipboard,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
