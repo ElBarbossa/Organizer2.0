@@ -208,50 +208,8 @@ async function init() {
     // Restaurer la fenêtre cible du travel automatique APRÈS le chargement des fenêtres
     log('=== RESTAURATION TRAVEL AUTOMATIQUE AU DÉMARRAGE ===');
     if (autoLoadProfile && !profileLoadedFromBackend) {
-        log('Tentative de restauration du travel automatique pour le profil:', autoLoadProfile);
-        const saved = localStorage.getItem(`rustfocus_profile_${autoLoadProfile}`);
-        if (saved) {
-            try {
-                const config = JSON.parse(saved);
-                log('Configuration du profil pour travel auto:', {
-                    autoTravelEnabled: config.autoTravelEnabled,
-                    autoTravelCharacterName: config.autoTravelCharacterName
-                });
-
-                // Restaurer l'état du travel automatique
-                const autoTravelCheckbox = document.getElementById('auto-travel-checkbox');
-                if (autoTravelCheckbox && config.autoTravelEnabled !== undefined) {
-                    autoTravelCheckbox.checked = config.autoTravelEnabled;
-                    if (config.autoTravelEnabled) {
-                        clipboardCheckInterval = setInterval(checkClipboardForTravel, 500);
-                    }
-                    log('✓ État du travel automatique restauré au démarrage:', config.autoTravelEnabled);
-                }
-
-                // Restaurer la fenêtre cible
-                if (config.autoTravelCharacterName) {
-                    const autoTravelWindowSelect = document.getElementById('space-paste-window-select');
-                    if (autoTravelWindowSelect) {
-                        log('Liste des fenêtres disponibles:', windowList.map(w => w.character_name));
-                        const targetWindow = windowList.find(w => w.character_name === config.autoTravelCharacterName);
-                        if (targetWindow) {
-                            autoTravelWindowSelect.value = targetWindow.handle;
-                            log('✓ Fenêtre cible du travel automatique restaurée au démarrage:', config.autoTravelCharacterName, '(handle:', targetWindow.handle, ')');
-                        } else {
-                            log('⚠ Fenêtre cible non trouvée:', config.autoTravelCharacterName);
-                        }
-                    } else {
-                        log('⚠ Élément select du travel automatique non trouvé');
-                    }
-                } else {
-                    log('Pas de fenêtre cible configurée dans le profil');
-                }
-            } catch (e) {
-                logError('❌ Erreur lors de la restauration du travel automatique au démarrage:', e);
-            }
-        } else {
-            log('⚠ Pas de configuration sauvegardée pour le profil:', autoLoadProfile);
-        }
+        log('Restauration du travel automatique pour le profil:', autoLoadProfile);
+        restoreAutoTravelState(autoLoadProfile, true);
     } else {
         log('⊘ Pas de restauration du travel automatique (pas de chargement automatique)');
     }
@@ -440,6 +398,9 @@ function setupEventListeners() {
             // IMPORTANT: Recharger les fenêtres APRÈS avoir chargé le profil pour appliquer l'ordre sauvegardé
             log('Rechargement des fenêtres après chargement du profil...');
             await loadWindows();
+
+            // Restaurer l'état complet du travel automatique APRÈS que les fenêtres soient chargées
+            restoreAutoTravelState(profileName, true);
 
             // Apply the loaded order to the taskbar immediately
             const characterNames = windowList.map(w => w.character_name);
@@ -870,6 +831,80 @@ function updateSpacePasteWindowSelect() {
 // Variables for clipboard monitoring
 let lastClipboardContent = '';
 let clipboardCheckInterval = null;
+let autoTravelErrorCount = 0; // Track consecutive errors to avoid spamming
+const AUTO_TRAVEL_MAX_ERRORS = 3; // Max errors before showing warning
+
+// =============================================================================
+// AUTO-TRAVEL STATE RESTORATION HELPER
+// =============================================================================
+// This helper function centralizes the restoration of auto-travel state
+// to avoid code duplication across profile loading, app init, and manual loads
+
+/**
+ * Restore auto-travel state from a profile configuration
+ * @param {string} profileName - Name of the profile to restore from
+ * @param {boolean} startMonitoring - Whether to start clipboard monitoring if enabled
+ * @returns {boolean} - True if restoration was successful
+ */
+function restoreAutoTravelState(profileName, startMonitoring = true) {
+    if (!profileName) {
+        log('restoreAutoTravelState: Pas de profil spécifié');
+        return false;
+    }
+
+    const saved = localStorage.getItem(`rustfocus_profile_${profileName}`);
+    if (!saved) {
+        log('restoreAutoTravelState: Pas de configuration sauvegardée pour:', profileName);
+        return false;
+    }
+
+    try {
+        const config = JSON.parse(saved);
+        log('restoreAutoTravelState: Configuration trouvée pour', profileName, {
+            autoTravelEnabled: config.autoTravelEnabled,
+            autoTravelCharacterName: config.autoTravelCharacterName
+        });
+
+        const autoTravelCheckbox = document.getElementById('auto-travel-checkbox');
+        const autoTravelWindowSelect = document.getElementById('space-paste-window-select');
+
+        // Restore checkbox state
+        if (autoTravelCheckbox && config.autoTravelEnabled !== undefined) {
+            autoTravelCheckbox.checked = config.autoTravelEnabled;
+
+            // Start/stop monitoring based on state
+            if (startMonitoring) {
+                // Clear any existing interval first
+                if (clipboardCheckInterval) {
+                    clearInterval(clipboardCheckInterval);
+                    clipboardCheckInterval = null;
+                }
+
+                if (config.autoTravelEnabled) {
+                    clipboardCheckInterval = setInterval(checkClipboardForTravel, 500);
+                    log('✓ Surveillance du presse-papier activée');
+                }
+            }
+            log('✓ État du travel automatique restauré:', config.autoTravelEnabled);
+        }
+
+        // Restore target window by character name
+        if (autoTravelWindowSelect && config.autoTravelCharacterName) {
+            const targetWindow = windowList.find(w => w.character_name === config.autoTravelCharacterName);
+            if (targetWindow) {
+                autoTravelWindowSelect.value = targetWindow.handle;
+                log('✓ Fenêtre cible restaurée:', config.autoTravelCharacterName, '(handle:', targetWindow.handle, ')');
+            } else {
+                log('⚠ Fenêtre cible non trouvée:', config.autoTravelCharacterName, '- fenêtres disponibles:', windowList.map(w => w.character_name));
+            }
+        }
+
+        return true;
+    } catch (error) {
+        logError('restoreAutoTravelState: Erreur lors de la restauration:', error);
+        return false;
+    }
+}
 
 // Send space + paste + enter sequence to selected window
 async function sendSpacePasteEnter(withFocus) {
@@ -907,36 +942,59 @@ async function sendSpacePasteEnter(withFocus) {
 
 // Check clipboard for /travel and auto-send
 async function checkClipboardForTravel() {
+    // Step 1: Read clipboard (separate try-catch for clipboard errors)
+    let clipboardText;
     try {
-        // Use Tauri clipboard API instead of navigator.clipboard
-        const clipboardText = await invoke('read_clipboard');
+        clipboardText = await invoke('read_clipboard');
+    } catch (clipboardError) {
+        // Clipboard errors are normal (empty clipboard, etc.) - ignore silently
+        return;
+    }
 
-        // Check if clipboard changed and contains /travel
-        if (clipboardText !== lastClipboardContent && clipboardText.includes('/travel')) {
-            log('Détection de /travel dans le presse-papier:', clipboardText);
-            lastClipboardContent = clipboardText;
+    // Step 2: Check if clipboard changed and contains /travel
+    if (clipboardText === lastClipboardContent) {
+        return; // No change, nothing to do
+    }
 
-            // Get selected window
-            const select = document.getElementById('space-paste-window-select');
-            const selectedHandle = select.value;
+    // Update last content
+    lastClipboardContent = clipboardText;
 
-            if (selectedHandle) {
-                log('Envoi automatique de la séquence pour /travel');
-                await invoke('send_space_paste_enter', {
-                    handle: parseInt(selectedHandle),
-                    withFocus: false  // Don't focus for auto-send
-                });
-                log('Séquence /travel envoyée automatiquement');
-            } else {
-                log('Aucune fenêtre sélectionnée pour l\'envoi automatique');
-            }
-        } else if (clipboardText !== lastClipboardContent) {
-            // Update last content even if it doesn't contain /travel
-            lastClipboardContent = clipboardText;
+    // Check if contains /travel
+    if (!clipboardText.includes('/travel')) {
+        return; // Not a travel command
+    }
+
+    log('Détection de /travel dans le presse-papier:', clipboardText);
+
+    // Get selected window
+    const select = document.getElementById('space-paste-window-select');
+    const selectedHandle = select.value;
+
+    if (!selectedHandle) {
+        log('Aucune fenêtre sélectionnée pour l\'envoi automatique');
+        return;
+    }
+
+    // Step 3: Send the sequence (separate try-catch for send errors)
+    try {
+        log('Envoi automatique de la séquence pour /travel');
+        await invoke('send_space_paste_enter', {
+            handle: parseInt(selectedHandle),
+            withFocus: true  // IMPORTANT: Must focus window for SendInput to work!
+        });
+        log('✓ Séquence /travel envoyée automatiquement');
+        updateStatusText('✓ Auto-travel: commande envoyée');
+        autoTravelErrorCount = 0; // Reset error count on success
+    } catch (sendError) {
+        autoTravelErrorCount++;
+        logError('Erreur autotravel:', sendError);
+
+        // Only show UI feedback after multiple consecutive errors to avoid spam
+        if (autoTravelErrorCount >= AUTO_TRAVEL_MAX_ERRORS) {
+            updateStatusText(`⚠ Auto-travel: erreur d'envoi (${sendError})`);
+            // Reset to allow new notifications after some successful operations
+            autoTravelErrorCount = 0;
         }
-    } catch (error) {
-        // Ignore clipboard access errors (happens when clipboard is empty)
-        // This is normal and expected
     }
 }
 
@@ -1391,25 +1449,8 @@ function renderProfileList(profiles) {
                 log('Rechargement des fenêtres après chargement du profil...');
                 await loadWindows();
 
-                // Restaurer la fenêtre cible du travel automatique APRÈS que les fenêtres soient chargées
-                const savedConfig = localStorage.getItem(`rustfocus_profile_${name}`);
-                if (savedConfig) {
-                    try {
-                        const config = JSON.parse(savedConfig);
-                        if (config.autoTravelCharacterName) {
-                            const autoTravelWindowSelect = document.getElementById('space-paste-window-select');
-                            if (autoTravelWindowSelect) {
-                                const targetWindow = windowList.find(w => w.character_name === config.autoTravelCharacterName);
-                                if (targetWindow) {
-                                    autoTravelWindowSelect.value = targetWindow.handle;
-                                    log('✓ Fenêtre cible du travel automatique restaurée après chargement des fenêtres:', config.autoTravelCharacterName);
-                                }
-                            }
-                        }
-                    } catch (e) {
-                        log('Erreur lors de la restauration de la fenêtre cible:', e);
-                    }
-                }
+                // Restaurer l'état complet du travel automatique APRÈS que les fenêtres soient chargées
+                restoreAutoTravelState(name, true);
 
                 // Apply the loaded order to the taskbar immediately
                 const characterNames = windowList.map(w => w.character_name);
@@ -1854,41 +1895,14 @@ async function loadProfileWithHotkeys(profileName) {
 
             // Restaurer l'ordre des fenêtres si disponible
             if (config.windowOrder && config.windowOrder.length > 0) {
-                log('✓ Ordre des fenêtres restauré depuis localStorage:', config.windowOrder);
-                // L'ordre sera appliqué lors du chargement des fenêtres
-                // IMPORTANT: Il faut s'assurer que loadWindows() utilise cet ordre
+                log('✓ Ordre des fenêtres trouvé dans le profil:', config.windowOrder);
+                // L'ordre sera appliqué lors du chargement des fenêtres par loadWindows()
             } else {
                 log('Aucun ordre de fenêtres trouvé dans le profil');
             }
 
-            // Restaurer l'état du travel automatique
-            const autoTravelCheckbox = document.getElementById('auto-travel-checkbox');
-            const autoTravelWindowSelect = document.getElementById('space-paste-window-select');
-
-            if (autoTravelCheckbox && config.autoTravelEnabled !== undefined) {
-                autoTravelCheckbox.checked = config.autoTravelEnabled;
-                // Déclencher l'activation/désactivation du mode auto
-                if (config.autoTravelEnabled) {
-                    clipboardCheckInterval = setInterval(checkClipboardForTravel, 500);
-                } else {
-                    if (clipboardCheckInterval) {
-                        clearInterval(clipboardCheckInterval);
-                    }
-                }
-                log('✓ État du travel automatique restauré:', config.autoTravelEnabled);
-            }
-
-            // Restaurer la fenêtre cible en cherchant par nom de personnage
-            if (autoTravelWindowSelect && config.autoTravelCharacterName) {
-                // Trouver le handle correspondant au nom du personnage
-                const targetWindow = windowList.find(w => w.character_name === config.autoTravelCharacterName);
-                if (targetWindow) {
-                    autoTravelWindowSelect.value = targetWindow.handle;
-                    log('✓ Fenêtre cible du travel automatique restaurée:', config.autoTravelCharacterName, '(handle:', targetWindow.handle, ')');
-                } else {
-                    log('⚠ Fenêtre cible du travel non trouvée:', config.autoTravelCharacterName);
-                }
-            }
+            // NOTE: La restauration de l'état autotravel est faite APRÈS loadWindows()
+            // car windowList n'est pas encore à jour ici. Voir restoreAutoTravelState().
         } catch (error) {
             logError('Erreur lors du parsing de la configuration:', error);
         }
