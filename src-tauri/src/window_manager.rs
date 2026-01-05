@@ -160,8 +160,7 @@ unsafe extern "system" fn enum_windows_proc(hwnd: HWND, lparam: LPARAM) -> BOOL 
 /// 1. Restore window if minimized
 /// 2. Attach thread input to synchronize input queues
 /// 3. Simulate Alt key press to "unlock" the foreground
-/// 4. Use SetWindowPos with TOPMOST flag temporarily
-/// 5. BringWindowToTop + SetForegroundWindow
+/// 4. BringWindowToTop + SetForegroundWindow
 fn force_foreground_window(hwnd: HWND) -> bool {
     unsafe {
         let current_thread_id = GetCurrentThreadId();
@@ -213,25 +212,9 @@ fn force_foreground_window(hwnd: HWND) -> bool {
         };
         SendInput(&[alt_input, alt_up_input], std::mem::size_of::<INPUT>() as i32);
 
-        // Step 4: Temporarily make window topmost
-        let _ = SetWindowPos(
-            hwnd,
-            HWND_TOPMOST,
-            0, 0, 0, 0,
-            SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW,
-        );
-
-        // Step 5: Bring to top and set foreground
+        // Step 4: Bring to top and set foreground (without TOPMOST to avoid flickering)
         let _ = BringWindowToTop(hwnd);
         let result = SetForegroundWindow(hwnd);
-
-        // Cleanup: Remove topmost flag to restore normal behavior
-        let _ = SetWindowPos(
-            hwnd,
-            HWND_NOTOPMOST,
-            0, 0, 0, 0,
-            SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW,
-        );
 
         // Cleanup: Detach thread input if we attached it
         if attached {
