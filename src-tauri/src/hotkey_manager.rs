@@ -107,6 +107,7 @@ impl HotkeyManager {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn unregister_hotkey(&self, id: i32) -> Result<()> {
         let manager = GLOBAL_MANAGER.get()
             .context("GlobalHotKeyManager not initialized")?;
@@ -219,6 +220,7 @@ impl HotkeyManager {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn stop_listening(&self) {
         let mut listening = self.listening.lock();
         *listening = false;
@@ -350,6 +352,7 @@ fn vk_to_code(vk: u32) -> Result<Code> {
     }
 }
 
+#[allow(dead_code)]
 pub mod vk_codes {
     // Page Up/Down
     pub const VK_PRIOR: u32 = 0x21;  // Page Up

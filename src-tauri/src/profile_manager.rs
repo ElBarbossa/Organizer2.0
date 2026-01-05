@@ -13,6 +13,7 @@ pub struct Profile {
 }
 
 impl Profile {
+    #[allow(dead_code)]
     pub fn new(name: String) -> Self {
         Self {
             name,
@@ -133,6 +134,7 @@ impl ProfileManager {
     }
 
     /// Load the current profile (auto-load on startup)
+    #[allow(dead_code)]
     pub fn load_current_profile(&self) -> Result<Option<Profile>> {
         let file_path = self.get_current_profile_path();
 

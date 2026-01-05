@@ -9,14 +9,14 @@ use windows::Win32::System::Threading::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     EnumWindows, GetClassNameW, GetWindowTextW, GetWindowThreadProcessId, IsWindowVisible,
-    SetForegroundWindow, SetWindowPos, SWP_NOMOVE, SWP_NOSIZE,
-    HWND_TOP, AllowSetForegroundWindow, ShowWindow, SW_HIDE, SW_SHOW,
-    GetForegroundWindow,
+    SetForegroundWindow, AllowSetForegroundWindow, ShowWindow, SW_HIDE, SW_SHOW,
+    GetForegroundWindow, BringWindowToTop, SetWindowPos, HWND_TOPMOST, HWND_NOTOPMOST,
+    SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW,
 };
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP,
-    KEYBD_EVENT_FLAGS, VIRTUAL_KEY, VK_SPACE, VK_CONTROL, VK_V, VK_RETURN,
-    KEYEVENTF_SCANCODE, MapVirtualKeyW, MAPVK_VK_TO_VSC,
+    KEYBD_EVENT_FLAGS, VIRTUAL_KEY, VK_SPACE, VK_CONTROL, VK_V, VK_RETURN, VK_MENU,
+    MapVirtualKeyW, MAPVK_VK_TO_VSC,
 };
 use windows::Win32::System::Threading::{
     AttachThreadInput, GetCurrentThreadId,
@@ -155,12 +155,90 @@ unsafe extern "system" fn enum_windows_proc(hwnd: HWND, lparam: LPARAM) -> BOOL 
     BOOL(1)
 }
 
+/// Force a window to the foreground, even when our app is not in foreground
+/// This uses multiple techniques to bypass Windows' foreground lock:
+/// 1. Simulate Alt key press to "unlock" the foreground
+/// 2. Attach thread input to the target window
+/// 3. Use SetWindowPos with TOPMOST flag temporarily
+/// 4. Call SetForegroundWindow
+fn force_foreground_window(hwnd: HWND) -> bool {
+    unsafe {
+        let current_thread_id = GetCurrentThreadId();
+        let mut target_thread_id = 0u32;
+        GetWindowThreadProcessId(hwnd, Some(&mut target_thread_id));
+
+        // Allow our process to set foreground window
+        let current_pid = GetCurrentProcessId();
+        let _ = AllowSetForegroundWindow(current_pid);
+
+        // Technique 1: Simulate Alt key press to unlock foreground
+        // This tricks Windows into thinking user interaction occurred
+        let alt_input = INPUT {
+            r#type: INPUT_KEYBOARD,
+            Anonymous: INPUT_0 {
+                ki: KEYBDINPUT {
+                    wVk: VK_MENU,
+                    wScan: 0,
+                    dwFlags: KEYBD_EVENT_FLAGS(0),
+                    time: 0,
+                    dwExtraInfo: 0,
+                },
+            },
+        };
+        let alt_up_input = INPUT {
+            r#type: INPUT_KEYBOARD,
+            Anonymous: INPUT_0 {
+                ki: KEYBDINPUT {
+                    wVk: VK_MENU,
+                    wScan: 0,
+                    dwFlags: KEYEVENTF_KEYUP,
+                    time: 0,
+                    dwExtraInfo: 0,
+                },
+            },
+        };
+        SendInput(&[alt_input, alt_up_input], std::mem::size_of::<INPUT>() as i32);
+
+        // Technique 2: Attach thread input if different threads
+        let attached = if target_thread_id != 0 && target_thread_id != current_thread_id {
+            AttachThreadInput(current_thread_id, target_thread_id, true).is_ok()
+        } else {
+            false
+        };
+
+        // Technique 3: Temporarily make window topmost, then remove topmost
+        let _ = SetWindowPos(
+            hwnd,
+            HWND_TOPMOST,
+            0, 0, 0, 0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW,
+        );
+
+        // Bring to top and set foreground
+        let _ = BringWindowToTop(hwnd);
+        let result = SetForegroundWindow(hwnd);
+
+        // Remove topmost flag to restore normal behavior
+        let _ = SetWindowPos(
+            hwnd,
+            HWND_NOTOPMOST,
+            0, 0, 0, 0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW,
+        );
+
+        // Detach thread input if we attached it
+        if attached {
+            let _ = AttachThreadInput(current_thread_id, target_thread_id, false);
+        }
+
+        result.as_bool()
+    }
+}
+
 /// Bring a specific window to the foreground
 pub fn focus_window(handle: isize) -> Result<()> {
-    unsafe {
-        let hwnd = HWND(handle);
-        SetForegroundWindow(hwnd);
-    }
+    let hwnd = HWND(handle);
+    force_foreground_window(hwnd);
     Ok(())
 }
 
@@ -287,16 +365,20 @@ fn create_key_input(vk: VIRTUAL_KEY, flags: KEYBD_EVENT_FLAGS) -> INPUT {
 /// Send a key sequence (Space + Paste + Enter + Enter) to a specific window
 /// Sequence: Space → Ctrl+V → Enter (send command) → Wait → Enter (validate popup)
 /// Always focuses the target window (required for SendInput)
+#[allow(unused_variables)]
 pub fn send_space_paste_enter_to_window(handle: isize, with_focus: bool) -> Result<()> {
-    println!("DEBUG: Sending space + paste + enter + enter sequence to window {} (with_focus: {})", handle, with_focus);
+    println!("DEBUG: Sending space + paste + enter + enter sequence to window {}", handle);
 
     unsafe {
         let hwnd = HWND(handle);
 
-        // Always focus the target window (required for SendInput to work)
-        // Try multiple times to ensure the window is actually focused
+        // Use force_foreground_window to ensure window is focused
+        // This works even when Organizer is not in foreground
+        println!("DEBUG: Forcing window to foreground using enhanced technique...");
+
         let mut focus_success = false;
         for attempt in 0..3 {
+            // Check if already in foreground
             let fg_hwnd = GetForegroundWindow();
             if fg_hwnd.0 == handle {
                 println!("DEBUG: Window already in foreground");
@@ -304,35 +386,23 @@ pub fn send_space_paste_enter_to_window(handle: isize, with_focus: bool) -> Resu
                 break;
             }
 
-            println!("DEBUG: Attempt {}/3 - Window not in foreground, attempting to focus...", attempt + 1);
+            println!("DEBUG: Attempt {}/3 - Forcing foreground...", attempt + 1);
+            force_foreground_window(hwnd);
 
-            let mut target_thread_id = 0u32;
-            GetWindowThreadProcessId(hwnd, Some(&mut target_thread_id));
-            let current_thread_id = GetCurrentThreadId();
+            // Wait for Windows to process
+            std::thread::sleep(std::time::Duration::from_millis(150));
 
-            if target_thread_id != 0 && target_thread_id != current_thread_id {
-                let _ = AttachThreadInput(current_thread_id, target_thread_id, true);
-                SetForegroundWindow(hwnd);
-                let _ = AttachThreadInput(current_thread_id, target_thread_id, false);
-            } else {
-                SetForegroundWindow(hwnd);
-            }
-
-            // Wait a bit for the window to actually come to foreground
-            std::thread::sleep(std::time::Duration::from_millis(200));
-
-            // Verify if focus was successful
+            // Verify
             let fg_hwnd = GetForegroundWindow();
             if fg_hwnd.0 == handle {
                 println!("DEBUG: Successfully focused window on attempt {}", attempt + 1);
                 focus_success = true;
                 break;
             } else {
-                println!("DEBUG: Focus failed on attempt {}. FG: {}, Target: {}", attempt + 1, fg_hwnd.0, handle);
+                println!("DEBUG: Focus attempt {} - FG: {}, Target: {}", attempt + 1, fg_hwnd.0, handle);
             }
         }
 
-        // Final verification - fail if window is not in foreground
         if !focus_success {
             let fg_hwnd = GetForegroundWindow();
             println!("ERROR: Failed to focus window after 3 attempts. FG: {}, Target: {}", fg_hwnd.0, handle);
