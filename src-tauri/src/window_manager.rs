@@ -201,7 +201,7 @@ fn force_foreground_window(hwnd: HWND) -> bool {
 
         // Technique 2: Attach thread input if different threads
         let attached = if target_thread_id != 0 && target_thread_id != current_thread_id {
-            AttachThreadInput(current_thread_id, target_thread_id, true).is_ok()
+            AttachThreadInput(current_thread_id, target_thread_id, true).as_bool()
         } else {
             false
         };
