@@ -2,11 +2,14 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod hotkey_manager;
+mod ocre_manager;
 mod profile_manager;
+mod screen_capture;
 mod window_manager;
 
 use anyhow::Result;
 use hotkey_manager::{vk_codes, Hotkey, HotkeyAction, HotkeyManager};
+use ocre_manager::{CaptureResult, Monster, OcreManager, OcreStatistics};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -29,6 +32,7 @@ struct AppState {
     window_list: Arc<Mutex<Vec<DofusWindow>>>,
     current_profile: Arc<Mutex<Option<Profile>>>,
     excluded_windows: Arc<Mutex<Vec<isize>>>, // Window handles excluded from hotkeys
+    ocre_manager: Arc<Mutex<OcreManager>>,
 }
 
 impl AppState {
@@ -39,6 +43,7 @@ impl AppState {
             window_list: Arc::new(Mutex::new(Vec::new())),
             current_profile: Arc::new(Mutex::new(None)),
             excluded_windows: Arc::new(Mutex::new(Vec::new())),
+            ocre_manager: Arc::new(Mutex::new(OcreManager::new()?)),
         })
     }
 }
@@ -449,6 +454,130 @@ fn read_clipboard(app_handle: AppHandle) -> Result<String, String> {
         .and_then(|opt| opt.ok_or_else(|| "Clipboard is empty".to_string()))
 }
 
+// ============================================================================
+// OCRE COMMANDS
+// ============================================================================
+
+/// Fetch monsters from Metamob API and cache locally
+#[tauri::command]
+fn ocre_fetch_monsters(state: tauri::State<AppState>, api_key: String) -> Result<usize, String> {
+    state.ocre_manager.lock()
+        .fetch_monsters_from_api(&api_key)
+        .map_err(|e| format!("Failed to fetch monsters: {}", e))
+}
+
+/// Get all cached monsters
+#[tauri::command]
+fn ocre_get_monsters(state: tauri::State<AppState>) -> Result<Vec<Monster>, String> {
+    Ok(state.ocre_manager.lock().get_monsters().clone())
+}
+
+/// Get monsters filtered by type
+#[tauri::command]
+fn ocre_get_monsters_by_type(state: tauri::State<AppState>, monster_type: String) -> Result<Vec<Monster>, String> {
+    let manager = state.ocre_manager.lock();
+    let monsters: Vec<Monster> = manager.get_monsters_by_type(&monster_type)
+        .into_iter()
+        .cloned()
+        .collect();
+    Ok(monsters)
+}
+
+/// Get quantity for a specific monster
+#[tauri::command]
+fn ocre_get_monster_quantity(state: tauri::State<AppState>, monster_id: i32) -> Result<i32, String> {
+    Ok(state.ocre_manager.lock().get_monster_quantity(monster_id))
+}
+
+/// Set quantity for a monster
+#[tauri::command]
+fn ocre_set_monster_quantity(state: tauri::State<AppState>, monster_id: i32, quantity: i32) -> Result<(), String> {
+    state.ocre_manager.lock()
+        .set_monster_quantity(monster_id, quantity)
+        .map_err(|e| format!("Failed to set quantity: {}", e))
+}
+
+/// Add quantity to a monster (+1)
+#[tauri::command]
+fn ocre_add_monster_quantity(state: tauri::State<AppState>, monster_id: i32, amount: i32) -> Result<i32, String> {
+    state.ocre_manager.lock()
+        .add_monster_quantity(monster_id, amount)
+        .map_err(|e| format!("Failed to add quantity: {}", e))
+}
+
+/// Process captured text and match to monsters
+#[tauri::command]
+fn ocre_process_captured_text(
+    state: tauri::State<AppState>,
+    lines: Vec<String>,
+    min_confidence: f64,
+) -> Result<CaptureResult, String> {
+    state.ocre_manager.lock()
+        .process_captured_text(lines, min_confidence)
+        .map_err(|e| format!("Failed to process captured text: {}", e))
+}
+
+/// Get Ocre statistics
+#[tauri::command]
+fn ocre_get_statistics(state: tauri::State<AppState>) -> Result<OcreStatistics, String> {
+    Ok(state.ocre_manager.lock().get_statistics())
+}
+
+/// Reset all Ocre progress
+#[tauri::command]
+fn ocre_reset_progress(state: tauri::State<AppState>) -> Result<(), String> {
+    state.ocre_manager.lock()
+        .reset_progress()
+        .map_err(|e| format!("Failed to reset progress: {}", e))
+}
+
+/// Export Ocre progress to JSON
+#[tauri::command]
+fn ocre_export_progress(state: tauri::State<AppState>) -> Result<String, String> {
+    state.ocre_manager.lock()
+        .export_progress()
+        .map_err(|e| format!("Failed to export progress: {}", e))
+}
+
+/// Import Ocre progress from JSON
+#[tauri::command]
+fn ocre_import_progress(state: tauri::State<AppState>, json: String) -> Result<usize, String> {
+    state.ocre_manager.lock()
+        .import_progress(&json)
+        .map_err(|e| format!("Failed to import progress: {}", e))
+}
+
+/// Capture screenshot of foreground window and return as base64 PNG
+#[tauri::command]
+fn ocre_capture_screenshot() -> Result<String, String> {
+    let screenshot = screen_capture::capture_foreground_window()
+        .map_err(|e| format!("Failed to capture screenshot: {}", e))?;
+
+    screenshot.to_base64_png()
+        .map_err(|e| format!("Failed to convert to base64: {}", e))
+}
+
+/// Capture a specific region of the screen
+#[tauri::command]
+fn ocre_capture_region(x: i32, y: i32, width: u32, height: u32) -> Result<String, String> {
+    let screenshot = screen_capture::capture_region(x, y, width, height)
+        .map_err(|e| format!("Failed to capture region: {}", e))?;
+
+    screenshot.to_base64_png()
+        .map_err(|e| format!("Failed to convert to base64: {}", e))
+}
+
+/// Get user progress (all monsters with quantities)
+#[tauri::command]
+fn ocre_get_progress(state: tauri::State<AppState>) -> Result<Vec<ocre_manager::MonsterProgress>, String> {
+    let manager = state.ocre_manager.lock();
+    let progress: Vec<ocre_manager::MonsterProgress> = manager.get_progress()
+        .values()
+        .cloned()
+        .collect();
+    Ok(progress)
+}
+
 fn main() {
     // Initialize app state
     let state = AppState::new().expect("Failed to initialize app state");
@@ -502,6 +631,21 @@ fn main() {
             show_window,
             send_space_paste_enter,
             read_clipboard,
+            // Ocre commands
+            ocre_fetch_monsters,
+            ocre_get_monsters,
+            ocre_get_monsters_by_type,
+            ocre_get_monster_quantity,
+            ocre_set_monster_quantity,
+            ocre_add_monster_quantity,
+            ocre_process_captured_text,
+            ocre_get_statistics,
+            ocre_reset_progress,
+            ocre_export_progress,
+            ocre_import_progress,
+            ocre_capture_screenshot,
+            ocre_capture_region,
+            ocre_get_progress,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

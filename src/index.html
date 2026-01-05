@@ -20,6 +20,7 @@
             <!-- Tab Navigation -->
             <div class="tab-nav">
                 <button class="tab-btn active" data-tab="windows">Fenêtres</button>
+                <button class="tab-btn" data-tab="ocre">Ocre</button>
                 <button class="tab-btn" data-tab="settings">Paramètres</button>
                 <button class="tab-btn" data-tab="profiles">Profils</button>
             </div>
@@ -71,6 +72,119 @@
 
                         <div class="sidebar-section sidebar-status">
                             <span class="status-text" id="status-text">Prêt</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Ocre Tab -->
+            <div class="tab-content" id="ocre-tab">
+                <div class="ocre-layout">
+                    <!-- Sidebar gauche -->
+                    <div class="ocre-sidebar">
+                        <!-- Statistiques -->
+                        <div class="ocre-stats-card">
+                            <h3>📊 Progression</h3>
+                            <div class="ocre-stat-row">
+                                <span>Archimonstres:</span>
+                                <span id="ocre-archimonstres-progress">0/0 (0%)</span>
+                            </div>
+                            <div class="progress-bar">
+                                <div class="progress-bar-fill" id="ocre-archimonstres-bar" style="width: 0%"></div>
+                            </div>
+                            <div class="ocre-stat-row">
+                                <span>Monstres:</span>
+                                <span id="ocre-monstres-progress">0/0 (0%)</span>
+                            </div>
+                            <div class="progress-bar">
+                                <div class="progress-bar-fill" id="ocre-monstres-bar" style="width: 0%"></div>
+                            </div>
+                        </div>
+
+                        <!-- Configuration API -->
+                        <div class="ocre-config-card">
+                            <h3>🔧 Configuration</h3>
+                            <div class="input-group-small">
+                                <label for="ocre-api-key">Clé API Metamob:</label>
+                                <input type="password" id="ocre-api-key" class="input-field" placeholder="Votre clé API...">
+                            </div>
+                            <button class="btn btn-primary btn-sm" onclick="ocreSyncMonsters()">
+                                🔄 Synchroniser les monstres
+                            </button>
+                            <small id="ocre-last-sync" class="text-muted">Jamais synchronisé</small>
+                        </div>
+
+                        <!-- Actions -->
+                        <div class="ocre-actions-card">
+                            <h3>⚡ Capture OCR</h3>
+                            <div class="input-group-small">
+                                <label for="ocre-capture-key">Touche de capture:</label>
+                                <kbd id="ocre-capture-hotkey">F10</kbd>
+                                <button class="btn btn-secondary btn-sm" onclick="configureOcreCaptureHotkey()">🔧</button>
+                            </div>
+                            <button class="btn btn-success" onclick="ocreCaptureAndProcess()">
+                                📸 Capturer maintenant
+                            </button>
+                            <div class="ocre-confidence-setting">
+                                <label for="ocre-confidence">Seuil de correspondance:</label>
+                                <input type="range" id="ocre-confidence" min="50" max="100" value="70">
+                                <span id="ocre-confidence-value">70%</span>
+                            </div>
+                        </div>
+
+                        <!-- Import/Export -->
+                        <div class="ocre-import-export-card">
+                            <h3>💾 Données</h3>
+                            <button class="btn btn-secondary btn-sm" onclick="ocreExportProgress()">📤 Exporter</button>
+                            <button class="btn btn-secondary btn-sm" onclick="ocreImportProgress()">📥 Importer</button>
+                            <button class="btn btn-danger btn-sm" onclick="ocreResetProgress()">🗑️ Réinitialiser</button>
+                        </div>
+                    </div>
+
+                    <!-- Zone principale -->
+                    <div class="ocre-main">
+                        <!-- Filtres et recherche -->
+                        <div class="ocre-toolbar">
+                            <div class="ocre-search">
+                                <input type="text" id="ocre-search" class="input-field" placeholder="🔍 Rechercher un monstre...">
+                            </div>
+                            <div class="ocre-filters">
+                                <select id="ocre-type-filter" class="input-field">
+                                    <option value="">Tous les types</option>
+                                    <option value="archimonstre">Archimonstres</option>
+                                    <option value="monstre">Monstres</option>
+                                    <option value="boss">Boss</option>
+                                </select>
+                                <select id="ocre-zone-filter" class="input-field">
+                                    <option value="">Toutes les zones</option>
+                                    <!-- Zones will be populated dynamically -->
+                                </select>
+                                <select id="ocre-status-filter" class="input-field">
+                                    <option value="">Tous</option>
+                                    <option value="owned">Possédés</option>
+                                    <option value="missing">Manquants</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Liste des monstres -->
+                        <div class="ocre-monster-list" id="ocre-monster-list">
+                            <div class="ocre-empty-state">
+                                <div class="ocre-empty-icon">🦎</div>
+                                <div class="ocre-empty-text">Aucun monstre chargé</div>
+                                <div class="ocre-empty-hint">Synchronisez la liste depuis Metamob pour commencer</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Panneau de résultats OCR -->
+                    <div class="ocre-results-panel" id="ocre-results-panel" style="display: none;">
+                        <div class="ocre-results-header">
+                            <h3>📋 Résultats de capture</h3>
+                            <button class="btn btn-secondary btn-sm" onclick="ocreCloseResults()">✕</button>
+                        </div>
+                        <div class="ocre-results-content" id="ocre-results-content">
+                            <!-- Results will be populated here -->
                         </div>
                     </div>
                 </div>

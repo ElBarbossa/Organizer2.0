@@ -110,6 +110,9 @@ async function init() {
     setupTabs();
     setupEventListeners();
 
+    // Initialiser le module Ocre
+    await initOcre();
+
     log('Application initialisée avec succès');
 
     // Check if there's a current profile loaded in the backend (Rust)
@@ -2508,3 +2511,464 @@ log('  - window.configureHotkey:', typeof window.configureHotkey);
 log('  - window.applyHotkeys:', typeof window.applyHotkeys);
 log('  - window.resetHotkeys:', typeof window.resetHotkeys);
 log('  - window.minimizeToTray:', typeof window.minimizeToTray);
+
+// ============================================================================
+// OCRE - Gestion des Monstres / Archimonstres
+// ============================================================================
+
+let ocreMonsters = [];
+let ocreProgress = {};
+let ocreCurrentFilter = { type: 'all', search: '', etape: 'all' };
+let ocreCaptureHotkey = localStorage.getItem('ocre_capture_hotkey') || 'F8';
+
+// Initialisation du module Ocre
+async function initOcre() {
+    log('[Ocre] Initialisation...');
+
+    // Charger les paramètres sauvegardés
+    const savedApiKey = localStorage.getItem('ocre_api_key') || '';
+    const apiKeyInput = document.getElementById('ocre-api-key');
+    if (apiKeyInput && savedApiKey) {
+        apiKeyInput.value = savedApiKey;
+    }
+
+    // Charger le hotkey sauvegardé
+    const hotkeyInput = document.getElementById('ocre-capture-hotkey');
+    if (hotkeyInput) {
+        hotkeyInput.value = ocreCaptureHotkey;
+    }
+
+    // Charger les monstres depuis le backend
+    try {
+        const monsters = await invoke('ocre_get_monsters');
+        ocreMonsters = monsters;
+        log('[Ocre] ' + monsters.length + ' monstres chargés depuis le cache');
+
+        // Charger la progression
+        const progress = await invoke('ocre_get_progress');
+        ocreProgress = progress;
+        log('[Ocre] Progression chargée');
+
+        // Mettre à jour l'interface
+        ocreRenderMonsters();
+        ocreUpdateStatistics();
+    } catch (error) {
+        logError('[Ocre] Erreur lors du chargement:', error);
+    }
+
+    // Configurer les event listeners
+    setupOcreEventListeners();
+
+    log('[Ocre] Module initialisé');
+}
+
+// Configuration des event listeners pour l'Ocre
+function setupOcreEventListeners() {
+    // Filtre par type
+    const typeFilter = document.getElementById('ocre-filter-type');
+    if (typeFilter) {
+        typeFilter.addEventListener('change', (e) => {
+            ocreCurrentFilter.type = e.target.value;
+            ocreFilterMonsters();
+        });
+    }
+
+    // Filtre par étape
+    const etapeFilter = document.getElementById('ocre-filter-etape');
+    if (etapeFilter) {
+        etapeFilter.addEventListener('change', (e) => {
+            ocreCurrentFilter.etape = e.target.value;
+            ocreFilterMonsters();
+        });
+    }
+
+    // Recherche
+    const searchInput = document.getElementById('ocre-search');
+    if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+            ocreCurrentFilter.search = e.target.value.toLowerCase();
+            ocreFilterMonsters();
+        });
+    }
+
+    // Hotkey de capture
+    const hotkeyInput = document.getElementById('ocre-capture-hotkey');
+    if (hotkeyInput) {
+        hotkeyInput.addEventListener('keydown', (e) => {
+            e.preventDefault();
+            ocreCaptureHotkey = e.key.toUpperCase();
+            hotkeyInput.value = ocreCaptureHotkey;
+            localStorage.setItem('ocre_capture_hotkey', ocreCaptureHotkey);
+            log('[Ocre] Hotkey de capture changé:', ocreCaptureHotkey);
+        });
+    }
+}
+
+// Synchroniser avec l'API Metamob
+async function ocreSyncMonsters() {
+    const apiKeyInput = document.getElementById('ocre-api-key');
+    const apiKey = apiKeyInput ? apiKeyInput.value.trim() : '';
+
+    if (!apiKey) {
+        alert('Veuillez entrer votre clé API Metamob');
+        return;
+    }
+
+    const syncBtn = document.getElementById('ocre-sync-btn');
+    if (syncBtn) {
+        syncBtn.disabled = true;
+        syncBtn.textContent = 'Synchronisation...';
+    }
+
+    try {
+        log('[Ocre] Synchronisation avec Metamob...');
+        const count = await invoke('ocre_sync_monsters', { apiKey });
+        log('[Ocre] ' + count + ' monstres synchronisés');
+
+        // Sauvegarder la clé API
+        localStorage.setItem('ocre_api_key', apiKey);
+
+        // Recharger les monstres
+        ocreMonsters = await invoke('ocre_get_monsters');
+        ocreRenderMonsters();
+        ocreUpdateStatistics();
+
+        alert('Synchronisation réussie ! ' + count + ' monstres chargés.');
+    } catch (error) {
+        logError('[Ocre] Erreur de synchronisation:', error);
+        alert('Erreur de synchronisation: ' + error);
+    } finally {
+        if (syncBtn) {
+            syncBtn.disabled = false;
+            syncBtn.textContent = 'Synchroniser';
+        }
+    }
+}
+
+// Afficher les monstres dans la grille
+function ocreRenderMonsters() {
+    const grid = document.getElementById('ocre-monster-grid');
+    if (!grid) return;
+
+    grid.innerHTML = '';
+
+    const filteredMonsters = ocreGetFilteredMonsters();
+
+    if (filteredMonsters.length === 0) {
+        grid.innerHTML = '<div class="ocre-empty">Aucun monstre trouvé. Synchronisez avec Metamob pour charger la liste.</div>';
+        return;
+    }
+
+    filteredMonsters.forEach(monster => {
+        const qty = ocreProgress[monster.id]?.quantite || 0;
+        const card = document.createElement('div');
+        card.className = 'ocre-monster-card' + (qty > 0 ? ' owned' : '');
+        card.dataset.id = monster.id;
+
+        card.innerHTML =
+            '<div class="ocre-monster-image">' +
+                '<img src="' + monster.image_url + '" alt="' + monster.nom + '" onerror="this.src=\'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2250%22 height=%2250%22><rect fill=%22%23333%22 width=%2250%22 height=%2250%22/><text x=%2225%22 y=%2230%22 text-anchor=%22middle%22 fill=%22%23666%22>?</text></svg>\'">' +
+            '</div>' +
+            '<div class="ocre-monster-info">' +
+                '<div class="ocre-monster-name" title="' + monster.nom + '">' + monster.nom + '</div>' +
+                '<div class="ocre-monster-meta">' +
+                    '<span class="ocre-monster-type ' + monster.monster_type + '">' + monster.monster_type + '</span>' +
+                    '<span class="ocre-monster-etape">Étape ' + monster.etape + '</span>' +
+                '</div>' +
+                '<div class="ocre-monster-zone" title="' + monster.zone + ' - ' + monster.souszone + '">' + monster.souszone + '</div>' +
+            '</div>' +
+            '<div class="ocre-monster-quantity">' +
+                '<button class="ocre-qty-btn minus" onclick="ocreUpdateQuantity(' + monster.id + ', -1)">-</button>' +
+                '<span class="ocre-qty-value">' + qty + '</span>' +
+                '<button class="ocre-qty-btn plus" onclick="ocreUpdateQuantity(' + monster.id + ', 1)">+</button>' +
+            '</div>';
+
+        grid.appendChild(card);
+    });
+
+    // Mettre à jour le compteur
+    const countSpan = document.getElementById('ocre-monster-count');
+    if (countSpan) {
+        countSpan.textContent = filteredMonsters.length + ' monstre(s)';
+    }
+}
+
+// Obtenir les monstres filtrés
+function ocreGetFilteredMonsters() {
+    return ocreMonsters.filter(monster => {
+        // Filtre par type
+        if (ocreCurrentFilter.type !== 'all' && monster.monster_type !== ocreCurrentFilter.type) {
+            return false;
+        }
+
+        // Filtre par étape
+        if (ocreCurrentFilter.etape !== 'all' && monster.etape !== parseInt(ocreCurrentFilter.etape)) {
+            return false;
+        }
+
+        // Filtre par recherche
+        if (ocreCurrentFilter.search) {
+            const searchLower = ocreCurrentFilter.search.toLowerCase();
+            if (!monster.nom.toLowerCase().includes(searchLower) &&
+                !monster.zone.toLowerCase().includes(searchLower) &&
+                !monster.souszone.toLowerCase().includes(searchLower)) {
+                return false;
+            }
+        }
+
+        return true;
+    });
+}
+
+// Filtrer et réafficher les monstres
+function ocreFilterMonsters() {
+    ocreRenderMonsters();
+}
+
+// Mettre à jour la quantité d'un monstre
+async function ocreUpdateQuantity(monsterId, delta) {
+    try {
+        const currentQty = ocreProgress[monsterId]?.quantite || 0;
+        const newQty = Math.max(0, currentQty + delta);
+
+        await invoke('ocre_set_quantity', { monsterId, quantity: newQty });
+
+        // Mettre à jour localement
+        if (!ocreProgress[monsterId]) {
+            ocreProgress[monsterId] = { id: monsterId, quantite: 0, captured_dates: [] };
+        }
+        ocreProgress[monsterId].quantite = newQty;
+
+        // Mettre à jour l'affichage de la carte
+        const card = document.querySelector('.ocre-monster-card[data-id="' + monsterId + '"]');
+        if (card) {
+            const qtySpan = card.querySelector('.ocre-qty-value');
+            if (qtySpan) qtySpan.textContent = newQty;
+
+            if (newQty > 0) {
+                card.classList.add('owned');
+            } else {
+                card.classList.remove('owned');
+            }
+        }
+
+        // Mettre à jour les statistiques
+        ocreUpdateStatistics();
+
+    } catch (error) {
+        logError('[Ocre] Erreur lors de la mise à jour de la quantité:', error);
+    }
+}
+
+// Mettre à jour les statistiques
+async function ocreUpdateStatistics() {
+    try {
+        const stats = await invoke('ocre_get_statistics');
+
+        // Monstres
+        const monstresProgress = document.getElementById('ocre-monstres-progress');
+        const monstresBar = document.getElementById('ocre-monstres-bar');
+        if (monstresProgress && monstresBar) {
+            monstresProgress.textContent = stats.captured_monstres + '/' + stats.total_monstres;
+            monstresBar.style.width = stats.progress_monstres.toFixed(1) + '%';
+        }
+
+        // Archimonstres
+        const archisProgress = document.getElementById('ocre-archis-progress');
+        const archisBar = document.getElementById('ocre-archis-bar');
+        if (archisProgress && archisBar) {
+            archisProgress.textContent = stats.captured_archimonstres + '/' + stats.total_archimonstres;
+            archisBar.style.width = stats.progress_archimonstres.toFixed(1) + '%';
+        }
+
+    } catch (error) {
+        logError('[Ocre] Erreur lors de la mise à jour des statistiques:', error);
+    }
+}
+
+// Capturer et traiter une image
+async function ocreCaptureAndProcess() {
+    log('[Ocre] Début de la capture...');
+
+    const resultsPanel = document.getElementById('ocre-results-panel');
+    const resultsContent = document.getElementById('ocre-results-content');
+
+    if (resultsPanel) {
+        resultsPanel.style.display = 'block';
+    }
+    if (resultsContent) {
+        resultsContent.innerHTML = '<div class="ocre-loading">Capture en cours...</div>';
+    }
+
+    try {
+        // Pour l'instant, on utilise une entrée manuelle
+        // TODO: Implémenter l'OCR réel avec capture d'écran
+        const text = prompt('Entrez le texte capturé (un monstre par ligne):');
+
+        if (!text) {
+            if (resultsContent) {
+                resultsContent.innerHTML = '<div class="ocre-empty">Capture annulée</div>';
+            }
+            return;
+        }
+
+        const lines = text.split('\n').filter(line => line.trim());
+
+        // Traiter les lignes capturées
+        const minConfidence = 0.7; // 70% de similarité minimum
+        const result = await invoke('ocre_process_capture', { lines, minConfidence });
+
+        log('[Ocre] Résultat de la capture:', result);
+
+        // Afficher les résultats
+        ocreShowResults(result);
+
+        // Recharger la progression
+        ocreProgress = await invoke('ocre_get_progress');
+        ocreRenderMonsters();
+        ocreUpdateStatistics();
+
+    } catch (error) {
+        logError('[Ocre] Erreur lors de la capture:', error);
+        if (resultsContent) {
+            resultsContent.innerHTML = '<div class="ocre-error">Erreur: ' + error + '</div>';
+        }
+    }
+}
+
+// Afficher les résultats de capture
+function ocreShowResults(result) {
+    const resultsContent = document.getElementById('ocre-results-content');
+    if (!resultsContent) return;
+
+    let html = '';
+
+    if (result.matched_monsters.length > 0) {
+        html += '<div class="ocre-results-section">';
+        html += '<h4>Monstres reconnus (' + result.matched_monsters.length + ')</h4>';
+        html += '<ul class="ocre-results-list">';
+
+        result.matched_monsters.forEach(match => {
+            const confidenceClass = match.confidence >= 0.9 ? 'high' : (match.confidence >= 0.7 ? 'medium' : 'low');
+            html += '<li class="ocre-result-item matched">' +
+                '<span class="ocre-result-name">' + match.monster.nom + '</span>' +
+                '<span class="ocre-result-confidence ' + confidenceClass + '">' + (match.confidence * 100).toFixed(0) + '%</span>' +
+                '<span class="ocre-result-qty">' + match.already_owned + ' → ' + match.new_quantity + '</span>' +
+            '</li>';
+        });
+
+        html += '</ul></div>';
+    }
+
+    if (result.unmatched_text.length > 0) {
+        html += '<div class="ocre-results-section">';
+        html += '<h4>Texte non reconnu (' + result.unmatched_text.length + ')</h4>';
+        html += '<ul class="ocre-results-list">';
+
+        result.unmatched_text.forEach(text => {
+            html += '<li class="ocre-result-item unmatched">' +
+                '<span class="ocre-result-text">' + text + '</span>' +
+            '</li>';
+        });
+
+        html += '</ul></div>';
+    }
+
+    if (result.matched_monsters.length === 0 && result.unmatched_text.length === 0) {
+        html = '<div class="ocre-empty">Aucun texte capturé</div>';
+    }
+
+    resultsContent.innerHTML = html;
+}
+
+// Fermer le panneau de résultats
+function ocreCloseResults() {
+    const resultsPanel = document.getElementById('ocre-results-panel');
+    if (resultsPanel) {
+        resultsPanel.style.display = 'none';
+    }
+}
+
+// Exporter la progression
+async function ocreExportProgress() {
+    try {
+        const json = await invoke('ocre_export_progress');
+
+        // Télécharger le fichier
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'ocre_progress_' + new Date().toISOString().split('T')[0] + '.json';
+        a.click();
+        URL.revokeObjectURL(url);
+
+        log('[Ocre] Progression exportée');
+    } catch (error) {
+        logError('[Ocre] Erreur lors de l\'export:', error);
+        alert('Erreur lors de l\'export: ' + error);
+    }
+}
+
+// Importer la progression
+async function ocreImportProgress() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+
+    input.onchange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        try {
+            const json = await file.text();
+            const count = await invoke('ocre_import_progress', { json });
+
+            log('[Ocre] ' + count + ' entrées importées');
+
+            // Recharger
+            ocreProgress = await invoke('ocre_get_progress');
+            ocreRenderMonsters();
+            ocreUpdateStatistics();
+
+            alert('Import réussi ! ' + count + ' entrées chargées.');
+        } catch (error) {
+            logError('[Ocre] Erreur lors de l\'import:', error);
+            alert('Erreur lors de l\'import: ' + error);
+        }
+    };
+
+    input.click();
+}
+
+// Réinitialiser la progression
+async function ocreResetProgress() {
+    if (!confirm('Êtes-vous sûr de vouloir réinitialiser toute votre progression ?\n\nCette action est irréversible !')) {
+        return;
+    }
+
+    try {
+        await invoke('ocre_reset_progress');
+
+        ocreProgress = {};
+        ocreRenderMonsters();
+        ocreUpdateStatistics();
+
+        log('[Ocre] Progression réinitialisée');
+        alert('Progression réinitialisée avec succès.');
+    } catch (error) {
+        logError('[Ocre] Erreur lors de la réinitialisation:', error);
+        alert('Erreur: ' + error);
+    }
+}
+
+// Exposer les fonctions Ocre globalement
+window.ocreSyncMonsters = ocreSyncMonsters;
+window.ocreCaptureAndProcess = ocreCaptureAndProcess;
+window.ocreCloseResults = ocreCloseResults;
+window.ocreUpdateQuantity = ocreUpdateQuantity;
+window.ocreExportProgress = ocreExportProgress;
+window.ocreImportProgress = ocreImportProgress;
+window.ocreResetProgress = ocreResetProgress;
+
+log('✓ Fonctions Ocre exposées');

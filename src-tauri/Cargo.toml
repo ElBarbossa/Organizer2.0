@@ -38,11 +38,22 @@ windows = { version = "0.52", features = [
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_Shell",
     "Win32_System_Memory",
+    "Win32_Graphics_Gdi",
+    "Win32_Graphics_Imaging",
+    "Graphics_Imaging",
+    "Media_Ocr",
+    "Storage_Streams",
+    "Foundation",
+    "Globalization",
 ] }
 parking_lot = "0.12"
 anyhow = "1.0"
 log = "0.4"
 global-hotkey = "0.6"
+reqwest = { version = "0.11", features = ["json", "blocking"] }
+strsim = "0.11"
+image = "0.24"
+base64 = "0.21"
 
 [features]
 # this feature is used for production builds or when `devPath` points to the filesystem
@@ -58,4 +69,11 @@ windows = { version = "0.52", features = [
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_Shell",
     "Win32_System_Memory",
+    "Win32_Graphics_Gdi",
+    "Win32_Graphics_Imaging",
+    "Graphics_Imaging",
+    "Media_Ocr",
+    "Storage_Streams",
+    "Foundation",
+    "Globalization",
 ] }
