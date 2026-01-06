@@ -48,6 +48,7 @@ pub enum HotkeyAction {
     NextWindow,
     PreviousWindow,
     DirectWindow(usize),
+    OcrCapture, // Capture OCR pour Ocre
 }
 
 pub struct HotkeyManager {

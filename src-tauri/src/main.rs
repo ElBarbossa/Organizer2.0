@@ -241,6 +241,14 @@ fn handle_hotkey_action(
     current_profile: &Arc<Mutex<Option<Profile>>>,
     app_handle: &AppHandle
 ) {
+    // Handle OCR capture action separately (doesn't need windows)
+    if matches!(action, HotkeyAction::OcrCapture) {
+        println!("[Ocre] OCR capture hotkey triggered!");
+        // Emit event to frontend to trigger OCR capture
+        let _ = app_handle.emit_all("ocre-capture-hotkey", ());
+        return;
+    }
+
     let all_windows = window_list.lock();
     let excluded = excluded_windows.lock();
     let profile = current_profile.lock();
@@ -567,6 +575,19 @@ fn ocre_capture_region(x: i32, y: i32, width: u32, height: u32) -> Result<String
         .map_err(|e| format!("Failed to convert to base64: {}", e))
 }
 
+/// Capture foreground window and perform OCR only (without processing)
+#[tauri::command]
+fn ocre_capture_ocr_only() -> Result<Vec<String>, String> {
+    println!("[Ocre] Starting capture OCR only...");
+
+    // Capture and perform OCR
+    let lines = screen_capture::capture_and_ocr()
+        .map_err(|e| format!("Failed to capture and OCR: {}", e))?;
+
+    println!("[Ocre] OCR extracted {} lines", lines.len());
+    Ok(lines)
+}
+
 /// Capture foreground window and perform OCR recognition
 #[tauri::command]
 fn ocre_capture_and_recognize(
@@ -620,6 +641,37 @@ fn ocre_get_progress(state: tauri::State<AppState>) -> Result<Vec<ocre_manager::
         .cloned()
         .collect();
     Ok(progress)
+}
+
+/// Register OCR capture hotkey
+#[tauri::command]
+fn ocre_register_hotkey(state: tauri::State<AppState>, key_code: u32) -> Result<(), String> {
+    let manager = state.hotkey_manager.lock();
+
+    // Use a special ID for OCR hotkey (negative to avoid collision with window hotkeys)
+    let ocr_hotkey_id = -100;
+
+    // First try to unregister if already registered (ignore errors)
+    let _ = manager.unregister_hotkey(ocr_hotkey_id);
+
+    // Register new hotkey
+    manager.register_hotkey(Hotkey {
+        id: ocr_hotkey_id,
+        modifiers: 0,
+        key_code,
+        action: HotkeyAction::OcrCapture,
+    }).map_err(|e| format!("Failed to register OCR hotkey: {}", e))?;
+
+    println!("[Ocre] OCR capture hotkey registered with key code 0x{:X}", key_code);
+    Ok(())
+}
+
+/// Unregister OCR capture hotkey
+#[tauri::command]
+fn ocre_unregister_hotkey(state: tauri::State<AppState>) -> Result<(), String> {
+    let manager = state.hotkey_manager.lock();
+    manager.unregister_hotkey(-100)
+        .map_err(|e| format!("Failed to unregister OCR hotkey: {}", e))
 }
 
 fn main() {
@@ -689,9 +741,12 @@ fn main() {
             ocre_import_progress,
             ocre_capture_screenshot,
             ocre_capture_region,
+            ocre_capture_ocr_only,
             ocre_capture_and_recognize,
             ocre_capture_region_and_recognize,
             ocre_get_progress,
+            ocre_register_hotkey,
+            ocre_unregister_hotkey,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

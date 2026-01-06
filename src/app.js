@@ -2520,6 +2520,19 @@ let ocreMonsters = [];
 let ocreProgress = {};
 let ocreCurrentFilter = { type: 'all', search: '', etape: 'all' };
 let ocreCaptureHotkey = localStorage.getItem('ocre_capture_hotkey') || 'F8';
+let ocreCapturedSignatures = JSON.parse(localStorage.getItem('ocre_captured_signatures') || '[]');
+
+// Conversion des noms de touches en Virtual Key Codes Windows
+const keyToVkCode = {
+    'F1': 0x70, 'F2': 0x71, 'F3': 0x72, 'F4': 0x73, 'F5': 0x74, 'F6': 0x75,
+    'F7': 0x76, 'F8': 0x77, 'F9': 0x78, 'F10': 0x79, 'F11': 0x7A, 'F12': 0x7B,
+    'INSERT': 0x2D, 'DELETE': 0x2E, 'HOME': 0x24, 'END': 0x23,
+    'PAGEUP': 0x21, 'PAGEDOWN': 0x22,
+    'NUMPAD0': 0x60, 'NUMPAD1': 0x61, 'NUMPAD2': 0x62, 'NUMPAD3': 0x63,
+    'NUMPAD4': 0x64, 'NUMPAD5': 0x65, 'NUMPAD6': 0x66, 'NUMPAD7': 0x67,
+    'NUMPAD8': 0x68, 'NUMPAD9': 0x69,
+    'MULTIPLY': 0x6A, 'ADD': 0x6B, 'SUBTRACT': 0x6D, 'DIVIDE': 0x6F,
+};
 
 // Initialisation du module Ocre
 async function initOcre() {
@@ -2559,7 +2572,36 @@ async function initOcre() {
     // Configurer les event listeners
     setupOcreEventListeners();
 
+    // Enregistrer le hotkey global
+    await ocreRegisterHotkey(ocreCaptureHotkey);
+
+    // Écouter l'événement de hotkey depuis le backend
+    if (listen) {
+        listen('ocre-capture-hotkey', () => {
+            log('[Ocre] Hotkey détecté!');
+            ocreCaptureAndProcess();
+        });
+    }
+
     log('[Ocre] Module initialisé');
+}
+
+// Enregistrer le hotkey OCR
+async function ocreRegisterHotkey(keyName) {
+    const vkCode = keyToVkCode[keyName.toUpperCase()];
+    if (!vkCode) {
+        logError('[Ocre] Touche non supportée:', keyName);
+        return false;
+    }
+
+    try {
+        await invoke('ocre_register_hotkey', { keyCode: vkCode });
+        log('[Ocre] Hotkey enregistré:', keyName, '(0x' + vkCode.toString(16) + ')');
+        return true;
+    } catch (error) {
+        logError('[Ocre] Erreur lors de l\'enregistrement du hotkey:', error);
+        return false;
+    }
 }
 
 // Configuration des event listeners pour l'Ocre
@@ -2594,12 +2636,25 @@ function setupOcreEventListeners() {
     // Hotkey de capture
     const hotkeyInput = document.getElementById('ocre-capture-hotkey');
     if (hotkeyInput) {
-        hotkeyInput.addEventListener('keydown', (e) => {
+        hotkeyInput.addEventListener('keydown', async (e) => {
             e.preventDefault();
-            ocreCaptureHotkey = e.key.toUpperCase();
+            const keyName = e.key.toUpperCase();
+
+            // Vérifier si la touche est supportée
+            if (!keyToVkCode[keyName]) {
+                alert('Touche non supportée. Utilisez F1-F12, Insert, Delete, Home, End, PageUp/Down ou le pavé numérique.');
+                return;
+            }
+
+            ocreCaptureHotkey = keyName;
             hotkeyInput.value = ocreCaptureHotkey;
             localStorage.setItem('ocre_capture_hotkey', ocreCaptureHotkey);
-            log('[Ocre] Hotkey de capture changé:', ocreCaptureHotkey);
+
+            // Enregistrer le nouveau hotkey global
+            const success = await ocreRegisterHotkey(ocreCaptureHotkey);
+            if (success) {
+                log('[Ocre] Hotkey de capture changé:', ocreCaptureHotkey);
+            }
         });
     }
 }
@@ -2786,6 +2841,45 @@ async function ocreUpdateStatistics() {
     }
 }
 
+// Générer une signature unique pour une pierre (basée sur les lignes triées)
+function ocreGenerateSignature(lines) {
+    // Filtrer et normaliser les lignes (ignorer les lignes vides, bonus, etc.)
+    const validLines = lines
+        .map(line => line.trim().toLowerCase())
+        .filter(line => {
+            if (!line) return false;
+            // Garder uniquement les lignes avec le format "nom (niveau)"
+            if (line.includes('bonus') || line.includes('récompense')) return false;
+            if (line.includes('effets') || line.includes('poids') || line.includes('prix')) return false;
+            return line.includes('(') && line.includes(')');
+        })
+        .sort();
+
+    // Créer une signature en joignant les lignes triées
+    return validLines.join('|');
+}
+
+// Vérifier si une pierre a déjà été capturée
+function ocreIsDuplicatePierre(signature) {
+    return ocreCapturedSignatures.includes(signature);
+}
+
+// Sauvegarder une signature de pierre
+function ocreSaveSignature(signature) {
+    if (signature && !ocreCapturedSignatures.includes(signature)) {
+        ocreCapturedSignatures.push(signature);
+        localStorage.setItem('ocre_captured_signatures', JSON.stringify(ocreCapturedSignatures));
+        log('[Ocre] Signature sauvegardée:', signature.substring(0, 50) + '...');
+    }
+}
+
+// Effacer l'historique des signatures (pour permettre de re-capturer)
+function ocreClearSignatures() {
+    ocreCapturedSignatures = [];
+    localStorage.setItem('ocre_captured_signatures', '[]');
+    log('[Ocre] Historique des signatures effacé');
+}
+
 // Capturer l'écran et lancer l'OCR automatiquement
 async function ocreCaptureAndProcess() {
     log('[Ocre] Début de la capture OCR automatique...');
@@ -2801,14 +2895,43 @@ async function ocreCaptureAndProcess() {
     }
 
     try {
-        // Attendre un court instant pour que l'utilisateur puisse positionner le jeu
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // Étape 1: Capturer et faire l'OCR uniquement (sans traitement)
+        const lines = await invoke('ocre_capture_ocr_only');
+        log('[Ocre] Lignes OCR capturées:', lines.length);
 
-        // Capturer et reconnaître automatiquement
-        const minConfidence = 0.7; // 70% de similarité minimum
-        const result = await invoke('ocre_capture_and_recognize', { minConfidence });
+        if (lines.length === 0) {
+            if (resultsContent) {
+                resultsContent.innerHTML = '<div class="ocre-error">Aucun texte détecté.<br><br><small>Assurez-vous que la pierre d\'âme est visible à l\'écran.</small></div>';
+            }
+            return;
+        }
 
-        log('[Ocre] Résultat de la capture OCR:', result);
+        // Étape 2: Générer la signature et vérifier les doublons
+        const signature = ocreGenerateSignature(lines);
+        log('[Ocre] Signature de la pierre:', signature.substring(0, 50) + '...');
+
+        if (signature && ocreIsDuplicatePierre(signature)) {
+            log('[Ocre] Pierre déjà capturée! (doublon détecté)');
+            if (resultsContent) {
+                resultsContent.innerHTML = '<div class="ocre-warning">' +
+                    '<strong>⚠️ Pierre déjà capturée!</strong><br><br>' +
+                    'Cette pierre d\'âme a déjà été ajoutée à votre progression.<br>' +
+                    'Les monstres n\'ont pas été comptés à nouveau.' +
+                    '</div>';
+            }
+            return;
+        }
+
+        // Étape 3: Traiter les lignes (ajouter les monstres)
+        const minConfidence = 0.7;
+        const result = await invoke('ocre_process_captured_text', { lines, minConfidence });
+
+        log('[Ocre] Résultat du traitement:', result);
+
+        // Étape 4: Sauvegarder la signature si des monstres ont été trouvés
+        if (result.matched_monsters && result.matched_monsters.length > 0) {
+            ocreSaveSignature(signature);
+        }
 
         // Afficher les résultats
         ocreShowResults(result);
@@ -2976,6 +3099,7 @@ async function ocreResetProgress() {
         await invoke('ocre_reset_progress');
 
         ocreProgress = {};
+        ocreClearSignatures(); // Effacer aussi l'historique des pierres
         ocreRenderMonsters();
         ocreUpdateStatistics();
 
@@ -2989,6 +3113,7 @@ async function ocreResetProgress() {
 
 // Exposer les fonctions Ocre globalement
 window.ocreSyncMonsters = ocreSyncMonsters;
+window.ocreClearSignatures = ocreClearSignatures;
 window.ocreCaptureAndProcess = ocreCaptureAndProcess;
 window.ocreCaptureRegion = ocreCaptureRegion;
 window.ocreCloseResults = ocreCloseResults;
