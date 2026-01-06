@@ -567,6 +567,50 @@ fn ocre_capture_region(x: i32, y: i32, width: u32, height: u32) -> Result<String
         .map_err(|e| format!("Failed to convert to base64: {}", e))
 }
 
+/// Capture foreground window and perform OCR recognition
+#[tauri::command]
+fn ocre_capture_and_recognize(
+    state: tauri::State<AppState>,
+    min_confidence: f64,
+) -> Result<CaptureResult, String> {
+    println!("[Ocre] Starting capture and recognize...");
+
+    // Capture and perform OCR
+    let lines = screen_capture::capture_and_ocr()
+        .map_err(|e| format!("Failed to capture and OCR: {}", e))?;
+
+    println!("[Ocre] OCR extracted {} lines", lines.len());
+
+    // Process the recognized text
+    state.ocre_manager.lock()
+        .process_captured_text(lines, min_confidence)
+        .map_err(|e| format!("Failed to process captured text: {}", e))
+}
+
+/// Capture a specific region and perform OCR recognition
+#[tauri::command]
+fn ocre_capture_region_and_recognize(
+    state: tauri::State<AppState>,
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+    min_confidence: f64,
+) -> Result<CaptureResult, String> {
+    println!("[Ocre] Starting region capture and recognize at ({}, {}) {}x{}...", x, y, width, height);
+
+    // Capture and perform OCR on region
+    let lines = screen_capture::capture_region_and_ocr(x, y, width, height)
+        .map_err(|e| format!("Failed to capture region and OCR: {}", e))?;
+
+    println!("[Ocre] OCR extracted {} lines", lines.len());
+
+    // Process the recognized text
+    state.ocre_manager.lock()
+        .process_captured_text(lines, min_confidence)
+        .map_err(|e| format!("Failed to process captured text: {}", e))
+}
+
 /// Get user progress (all monsters with quantities)
 #[tauri::command]
 fn ocre_get_progress(state: tauri::State<AppState>) -> Result<Vec<ocre_manager::MonsterProgress>, String> {
@@ -645,6 +689,8 @@ fn main() {
             ocre_import_progress,
             ocre_capture_screenshot,
             ocre_capture_region,
+            ocre_capture_and_recognize,
+            ocre_capture_region_and_recognize,
             ocre_get_progress,
         ])
         .run(tauri::generate_context!())

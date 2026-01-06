@@ -7,8 +7,12 @@ use windows::Win32::Graphics::Gdi::{
     BI_RGB, DIB_RGB_COLORS, SRCCOPY,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetClientRect, GetForegroundWindow, GetWindowRect,
+    GetForegroundWindow, GetWindowRect,
 };
+use windows::Graphics::Imaging::{BitmapDecoder, BitmapPixelFormat, SoftwareBitmap};
+use windows::Media::Ocr::OcrEngine;
+use windows::Storage::Streams::{DataWriter, InMemoryRandomAccessStream};
+use windows::Globalization::Language;
 
 /// Captured screenshot data
 #[derive(Debug, Clone)]
@@ -268,6 +272,101 @@ pub fn capture_region(x: i32, y: i32, width: u32, height: u32) -> Result<Screens
             data,
         })
     }
+}
+
+/// Perform OCR on a screenshot using Windows OCR
+pub fn perform_ocr(screenshot: &Screenshot) -> Result<Vec<String>> {
+    println!("[OCR] Starting OCR on {}x{} image...", screenshot.width, screenshot.height);
+
+    // Convert screenshot to PNG
+    let png_data = screenshot.to_png()?;
+    println!("[OCR] PNG encoded: {} bytes", png_data.len());
+
+    // Create an in-memory stream from the PNG data
+    let stream = InMemoryRandomAccessStream::new()
+        .context("Failed to create memory stream")?;
+
+    // Write PNG data to stream
+    {
+        let writer = DataWriter::CreateDataWriter(&stream)
+            .context("Failed to create data writer")?;
+        writer.WriteBytes(&png_data)
+            .context("Failed to write bytes")?;
+        writer.StoreAsync()
+            .context("Failed to store async")?
+            .get()
+            .context("Failed to get store result")?;
+        writer.FlushAsync()
+            .context("Failed to flush async")?
+            .get()
+            .context("Failed to get flush result")?;
+        writer.DetachStream()
+            .context("Failed to detach stream")?;
+    }
+
+    // Reset stream position to beginning
+    stream.Seek(0)
+        .context("Failed to seek stream")?;
+
+    // Decode the image
+    let decoder = BitmapDecoder::CreateAsync(&stream)
+        .context("Failed to create decoder async")?
+        .get()
+        .context("Failed to get decoder")?;
+
+    // Get software bitmap for OCR
+    let software_bitmap = decoder.GetSoftwareBitmapAsync()
+        .context("Failed to get software bitmap async")?
+        .get()
+        .context("Failed to get software bitmap")?;
+
+    // Convert to format supported by OCR (Gray8 or Bgra8)
+    let converted_bitmap = SoftwareBitmap::Convert(&software_bitmap, BitmapPixelFormat::Gray8)
+        .context("Failed to convert bitmap")?;
+
+    // Try to get French OCR engine, fallback to default
+    let engine = OcrEngine::TryCreateFromLanguage(&Language::CreateLanguage(&windows::core::HSTRING::from("fr-FR"))?)
+        .or_else(|_| OcrEngine::TryCreateFromUserProfileLanguages())
+        .context("Failed to create OCR engine - no language available")?;
+
+    println!("[OCR] Using OCR engine for language: {:?}", engine.RecognizerLanguage()?.LanguageTag());
+
+    // Perform OCR
+    let ocr_result = engine.RecognizeAsync(&converted_bitmap)
+        .context("Failed to start OCR")?
+        .get()
+        .context("Failed to get OCR result")?;
+
+    // Extract text lines
+    let mut lines: Vec<String> = Vec::new();
+
+    let ocr_lines = ocr_result.Lines()
+        .context("Failed to get OCR lines")?;
+
+    for i in 0..ocr_lines.Size()? {
+        let line = ocr_lines.GetAt(i)?;
+        let text = line.Text()?.to_string();
+        if !text.trim().is_empty() {
+            println!("[OCR] Line {}: {}", i, text);
+            lines.push(text);
+        }
+    }
+
+    println!("[OCR] Extracted {} lines of text", lines.len());
+
+    Ok(lines)
+}
+
+/// Capture the foreground window and perform OCR
+pub fn capture_and_ocr() -> Result<Vec<String>> {
+    let screenshot = capture_foreground_window()?;
+    perform_ocr(&screenshot)
+}
+
+/// Capture a specific region and perform OCR
+pub fn capture_region_and_ocr(x: i32, y: i32, width: u32, height: u32) -> Result<Vec<String>> {
+    let screenshot = capture_region(x, y, width, height)?;
+    perform_ocr(&screenshot)
 }
 
 #[cfg(test)]

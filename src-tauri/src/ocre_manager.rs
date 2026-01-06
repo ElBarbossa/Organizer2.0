@@ -249,18 +249,78 @@ impl OcreManager {
         best_match
     }
 
+    /// Parse a line in the format "Nom du monstre (niveau)" and extract the name
+    /// Handles various formats:
+    /// - "Bwork Archer (37)" -> "Bwork Archer"
+    /// - "Bwormage le Respectueux (44)" -> "Bwormage le Respectueux"
+    /// - "Bonus de récompenses : +68%" -> None (filtered out)
+    fn parse_monster_line(line: &str) -> Option<String> {
+        let trimmed = line.trim();
+
+        // Skip empty lines
+        if trimmed.is_empty() {
+            return None;
+        }
+
+        // Skip non-monster lines (bonus, headers, etc.)
+        let skip_patterns = [
+            "bonus de",
+            "récompense",
+            "effets",
+            "poids",
+            "prix",
+            "niveau",
+            "pierre d'âme",
+            "archimonstre :",
+            "cette pierre",
+        ];
+
+        let lower = trimmed.to_lowercase();
+        for pattern in &skip_patterns {
+            if lower.contains(pattern) {
+                return None;
+            }
+        }
+
+        // Try to extract name from "Nom (niveau)" format
+        if let Some(paren_pos) = trimmed.rfind('(') {
+            // Check if there's a closing parenthesis with a number inside
+            if let Some(close_pos) = trimmed.rfind(')') {
+                if close_pos > paren_pos {
+                    let inside = &trimmed[paren_pos + 1..close_pos];
+                    // Verify it's a number (level)
+                    if inside.trim().parse::<i32>().is_ok() {
+                        let name = trimmed[..paren_pos].trim();
+                        if !name.is_empty() {
+                            return Some(name.to_string());
+                        }
+                    }
+                }
+            }
+        }
+
+        // If no (niveau) format, return the whole line as potential monster name
+        // but only if it looks like a valid name (not too short, no special chars)
+        if trimmed.len() >= 3 && !trimmed.contains(':') && !trimmed.contains('%') {
+            return Some(trimmed.to_string());
+        }
+
+        None
+    }
+
     /// Process captured text and match to monsters
     pub fn process_captured_text(&mut self, lines: Vec<String>, min_confidence: f64) -> Result<CaptureResult> {
         let mut matched_monsters = Vec::new();
         let mut unmatched_text = Vec::new();
 
         for line in &lines {
-            let trimmed = line.trim();
-            if trimmed.is_empty() {
-                continue;
-            }
+            // Parse the line to extract monster name
+            let monster_name = match Self::parse_monster_line(line) {
+                Some(name) => name,
+                None => continue, // Skip non-monster lines
+            };
 
-            match self.find_monster_by_name(trimmed, min_confidence) {
+            match self.find_monster_by_name(&monster_name, min_confidence) {
                 Some((monster, confidence)) => {
                     let already_owned = self.get_monster_quantity(monster.id);
                     let new_quantity = already_owned + 1;
@@ -270,14 +330,14 @@ impl OcreManager {
 
                     matched_monsters.push(MatchedMonster {
                         monster: monster.clone(),
-                        captured_text: trimmed.to_string(),
+                        captured_text: monster_name,
                         confidence,
                         already_owned,
                         new_quantity,
                     });
                 }
                 None => {
-                    unmatched_text.push(trimmed.to_string());
+                    unmatched_text.push(monster_name);
                 }
             }
         }

@@ -2786,9 +2786,9 @@ async function ocreUpdateStatistics() {
     }
 }
 
-// Capturer et traiter une image
+// Capturer l'écran et lancer l'OCR automatiquement
 async function ocreCaptureAndProcess() {
-    log('[Ocre] Début de la capture...');
+    log('[Ocre] Début de la capture OCR automatique...');
 
     const resultsPanel = document.getElementById('ocre-results-panel');
     const resultsContent = document.getElementById('ocre-results-content');
@@ -2797,28 +2797,18 @@ async function ocreCaptureAndProcess() {
         resultsPanel.style.display = 'block';
     }
     if (resultsContent) {
-        resultsContent.innerHTML = '<div class="ocre-loading">Capture en cours...</div>';
+        resultsContent.innerHTML = '<div class="ocre-loading">Capture et reconnaissance en cours...<br><small>Survolez la pierre d\'âme dans le jeu</small></div>';
     }
 
     try {
-        // Pour l'instant, on utilise une entrée manuelle
-        // TODO: Implémenter l'OCR réel avec capture d'écran
-        const text = prompt('Entrez le texte capturé (un monstre par ligne):');
+        // Attendre un court instant pour que l'utilisateur puisse positionner le jeu
+        await new Promise(resolve => setTimeout(resolve, 500));
 
-        if (!text) {
-            if (resultsContent) {
-                resultsContent.innerHTML = '<div class="ocre-empty">Capture annulée</div>';
-            }
-            return;
-        }
-
-        const lines = text.split('\n').filter(line => line.trim());
-
-        // Traiter les lignes capturées
+        // Capturer et reconnaître automatiquement
         const minConfidence = 0.7; // 70% de similarité minimum
-        const result = await invoke('ocre_process_capture', { lines, minConfidence });
+        const result = await invoke('ocre_capture_and_recognize', { minConfidence });
 
-        log('[Ocre] Résultat de la capture:', result);
+        log('[Ocre] Résultat de la capture OCR:', result);
 
         // Afficher les résultats
         ocreShowResults(result);
@@ -2829,7 +2819,42 @@ async function ocreCaptureAndProcess() {
         ocreUpdateStatistics();
 
     } catch (error) {
-        logError('[Ocre] Erreur lors de la capture:', error);
+        logError('[Ocre] Erreur lors de la capture OCR:', error);
+        if (resultsContent) {
+            resultsContent.innerHTML = '<div class="ocre-error">Erreur OCR: ' + error + '<br><br><small>Astuce : Assurez-vous que la fenêtre du jeu avec la pierre d\'âme est visible</small></div>';
+        }
+    }
+}
+
+// Capturer une région spécifique
+async function ocreCaptureRegion(x, y, width, height) {
+    log('[Ocre] Capture de région:', x, y, width, height);
+
+    const resultsPanel = document.getElementById('ocre-results-panel');
+    const resultsContent = document.getElementById('ocre-results-content');
+
+    if (resultsPanel) {
+        resultsPanel.style.display = 'block';
+    }
+    if (resultsContent) {
+        resultsContent.innerHTML = '<div class="ocre-loading">Capture et reconnaissance de la région...</div>';
+    }
+
+    try {
+        const minConfidence = 0.7;
+        const result = await invoke('ocre_capture_region_and_recognize', {
+            x, y, width, height, minConfidence
+        });
+
+        log('[Ocre] Résultat de la capture région:', result);
+
+        ocreShowResults(result);
+        ocreProgress = await invoke('ocre_get_progress');
+        ocreRenderMonsters();
+        ocreUpdateStatistics();
+
+    } catch (error) {
+        logError('[Ocre] Erreur lors de la capture région:', error);
         if (resultsContent) {
             resultsContent.innerHTML = '<div class="ocre-error">Erreur: ' + error + '</div>';
         }
@@ -2965,6 +2990,7 @@ async function ocreResetProgress() {
 // Exposer les fonctions Ocre globalement
 window.ocreSyncMonsters = ocreSyncMonsters;
 window.ocreCaptureAndProcess = ocreCaptureAndProcess;
+window.ocreCaptureRegion = ocreCaptureRegion;
 window.ocreCloseResults = ocreCloseResults;
 window.ocreUpdateQuantity = ocreUpdateQuantity;
 window.ocreExportProgress = ocreExportProgress;
