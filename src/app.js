@@ -3015,26 +3015,68 @@ function ocreRenderPierres() {
     }
 
     let html = '';
+    let invalidCount = 0;
+
     ocreCapturedSignatures.forEach((sig, index) => {
         // Extraire les noms de monstres de la signature
-        const monsters = sig.split('|').map(line => {
-            const match = line.match(/^(.+?)\s*\(\d+\)$/);
+        const parts = sig.split('|').filter(p => p.trim());
+        const monsters = parts.map(line => {
+            const match = line.match(/^(.+?)\s*\(\d+\)$/i);
             return match ? match[1].trim() : line.split('(')[0].trim();
-        }).filter(n => n);
+        }).filter(n => n && n.length > 1);
 
-        const preview = monsters.slice(0, 3).join(', ');
-        const more = monsters.length > 3 ? ' +' + (monsters.length - 3) : '';
+        if (monsters.length === 0) {
+            invalidCount++;
+            // Afficher avec indicateur d'invalidité
+            const shortSig = sig.substring(0, 30) + (sig.length > 30 ? '...' : '');
+            html += '<div class="ocre-pierre-item invalid">' +
+                '<span class="ocre-pierre-info" title="' + sig + '">' +
+                    '<span class="ocre-pierre-count" style="background:#ef4444">?</span> ' +
+                    '<em style="opacity:0.5">' + (shortSig || 'vide') + '</em>' +
+                '</span>' +
+                '<button class="btn btn-danger btn-xs" onclick="ocreDeletePierre(' + index + ')" title="Supprimer">✕</button>' +
+            '</div>';
+        } else {
+            const preview = monsters.slice(0, 3).join(', ');
+            const more = monsters.length > 3 ? ' +' + (monsters.length - 3) : '';
 
-        html += '<div class="ocre-pierre-item">' +
-            '<span class="ocre-pierre-info" title="' + monsters.join(', ') + '">' +
-                '<span class="ocre-pierre-count">' + monsters.length + ' mob(s)</span> ' +
-                preview + more +
-            '</span>' +
-            '<button class="btn btn-danger btn-xs" onclick="ocreDeletePierre(' + index + ')" title="Supprimer">✕</button>' +
-        '</div>';
+            html += '<div class="ocre-pierre-item">' +
+                '<span class="ocre-pierre-info" title="' + monsters.join(', ') + '">' +
+                    '<span class="ocre-pierre-count">' + monsters.length + '</span> ' +
+                    preview + more +
+                '</span>' +
+                '<button class="btn btn-danger btn-xs" onclick="ocreDeletePierre(' + index + ')" title="Supprimer">✕</button>' +
+            '</div>';
+        }
     });
 
+    // Ajouter bouton pour nettoyer les invalides
+    if (invalidCount > 0) {
+        html = '<div style="color:#f59e0b;font-size:11px;margin-bottom:8px;padding:5px;background:rgba(245,158,11,0.1);border-radius:4px;">' +
+            '⚠️ ' + invalidCount + ' pierre(s) invalide(s) - ' +
+            '<a href="#" onclick="ocreCleanInvalidPierres();return false;" style="color:#f59e0b;text-decoration:underline;">Nettoyer</a>' +
+        '</div>' + html;
+    }
+
     container.innerHTML = html;
+}
+
+// Nettoyer les pierres avec signatures invalides
+function ocreCleanInvalidPierres() {
+    const validSignatures = ocreCapturedSignatures.filter(sig => {
+        const parts = sig.split('|').filter(p => p.trim());
+        const monsters = parts.map(line => {
+            const match = line.match(/^(.+?)\s*\(\d+\)$/i);
+            return match ? match[1].trim() : '';
+        }).filter(n => n && n.length > 1);
+        return monsters.length > 0;
+    });
+
+    const removed = ocreCapturedSignatures.length - validSignatures.length;
+    ocreCapturedSignatures = validSignatures;
+    localStorage.setItem('ocre_captured_signatures', JSON.stringify(ocreCapturedSignatures));
+    log('[Ocre] ' + removed + ' pierre(s) invalide(s) supprimée(s)');
+    ocreRenderPierres();
 }
 
 // Variable pour stocker les lignes en attente de validation
@@ -3418,6 +3460,7 @@ async function ocreResetProgress() {
 window.ocreSyncMonsters = ocreSyncMonsters;
 window.ocreClearSignatures = ocreClearSignatures;
 window.ocreDeletePierre = ocreDeletePierre;
+window.ocreCleanInvalidPierres = ocreCleanInvalidPierres;
 window.ocreCaptureAndProcess = ocreCaptureAndProcess;
 window.ocreValidateCapture = ocreValidateCapture;
 window.ocreCancelCapture = ocreCancelCapture;
