@@ -3332,21 +3332,26 @@ async function ocreValidateAllCaptures() {
 
 // Mode capture automatique avec détection de changement
 let ocreAutoCaptureInterval = null;
-let ocreAutoCaptureDelay = 1500; // 1.5 secondes
+let ocreAutoCaptureDelay = 600; // 0.6 seconde (plus rapide)
 let ocreLastCapturedSignature = null; // Pour détecter les changements
+let ocreIsCapturing = false; // Éviter les captures simultanées
 
 function ocreStartAutoCapture() {
     if (ocreAutoCaptureInterval) return;
 
-    log('[Ocre] Démarrage capture auto avec détection de changement');
+    log('[Ocre] Démarrage capture auto');
     ocreLastCapturedSignature = null;
+    ocreIsCapturing = false;
 
     // Première capture immédiate
     ocreCaptureWithChangeDetection();
 
     // Puis captures régulières
     ocreAutoCaptureInterval = setInterval(() => {
-        ocreCaptureWithChangeDetection();
+        // Ne pas lancer si une capture est déjà en cours
+        if (!ocreIsCapturing) {
+            ocreCaptureWithChangeDetection();
+        }
     }, ocreAutoCaptureDelay);
 
     ocreRenderPendingQueue();
@@ -3354,30 +3359,45 @@ function ocreStartAutoCapture() {
 
 // Capture avec détection de changement - ajoute automatiquement si nouvelle pierre
 async function ocreCaptureWithChangeDetection() {
+    if (ocreIsCapturing) return;
+    ocreIsCapturing = true;
+
     try {
         const lines = await invoke('ocre_capture_ocr_only');
-        if (lines.length === 0) return;
+        if (lines.length === 0) {
+            ocreIsCapturing = false;
+            return;
+        }
 
         const monsterNames = ocreExtractMonsterNames(lines);
-        if (monsterNames.length === 0) return;
+        if (monsterNames.length === 0) {
+            ocreIsCapturing = false;
+            return;
+        }
 
         const signature = ocreGenerateSignature(lines);
-        if (!signature) return;
+        if (!signature) {
+            ocreIsCapturing = false;
+            return;
+        }
 
         // Même signature que la dernière capture? On ignore
         if (signature === ocreLastCapturedSignature) {
+            ocreIsCapturing = false;
             return;
         }
 
         // Déjà enregistrée dans les pierres? On ignore
         if (ocreIsDuplicatePierre(signature)) {
             ocreLastCapturedSignature = signature;
+            ocreIsCapturing = false;
             return;
         }
 
         // Déjà dans la file d'attente? On ignore
         if (ocrePendingCaptures.some(c => c.signature === signature)) {
             ocreLastCapturedSignature = signature;
+            ocreIsCapturing = false;
             return;
         }
 
@@ -3390,7 +3410,8 @@ async function ocreCaptureWithChangeDetection() {
 
     } catch (error) {
         // Silencieux en mode auto
-        log('[Ocre] Erreur capture auto:', error);
+    } finally {
+        ocreIsCapturing = false;
     }
 }
 
@@ -3399,6 +3420,7 @@ function ocreStopAutoCapture() {
         clearInterval(ocreAutoCaptureInterval);
         ocreAutoCaptureInterval = null;
         ocreLastCapturedSignature = null;
+        ocreIsCapturing = false;
         log('[Ocre] Capture automatique arrêtée');
         ocreRenderPendingQueue();
     }
