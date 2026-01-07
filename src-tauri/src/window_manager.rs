@@ -10,8 +10,7 @@ use windows::Win32::System::Threading::{
 use windows::Win32::UI::WindowsAndMessaging::{
     EnumWindows, GetClassNameW, GetWindowTextW, GetWindowThreadProcessId, IsWindowVisible,
     SetForegroundWindow, AllowSetForegroundWindow, ShowWindow, SW_HIDE, SW_SHOW, SW_RESTORE,
-    GetForegroundWindow, BringWindowToTop, SetWindowPos, HWND_TOPMOST, HWND_NOTOPMOST,
-    SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, IsIconic,
+    GetForegroundWindow, BringWindowToTop, IsIconic,
 };
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP,

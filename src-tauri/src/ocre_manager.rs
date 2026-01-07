@@ -313,6 +313,9 @@ impl OcreManager {
         let mut matched_monsters = Vec::new();
         let mut unmatched_text = Vec::new();
 
+        // First pass: collect all matches (without modifying self)
+        let mut matches_to_add: Vec<(Monster, String, f64, i32)> = Vec::new();
+
         for line in &lines {
             // Parse the line to extract monster name
             let monster_name = match Self::parse_monster_line(line) {
@@ -323,23 +326,29 @@ impl OcreManager {
             match self.find_monster_by_name(&monster_name, min_confidence) {
                 Some((monster, confidence)) => {
                     let already_owned = self.get_monster_quantity(monster.id);
-                    let new_quantity = already_owned + 1;
-
-                    // Add +1 to the monster
-                    self.add_monster_quantity(monster.id, 1)?;
-
-                    matched_monsters.push(MatchedMonster {
-                        monster: monster.clone(),
-                        captured_text: monster_name,
-                        confidence,
-                        already_owned,
-                        new_quantity,
-                    });
+                    // Clone monster data for later use
+                    matches_to_add.push((monster.clone(), monster_name, confidence, already_owned));
                 }
                 None => {
                     unmatched_text.push(monster_name);
                 }
             }
+        }
+
+        // Second pass: add quantities and build results (now we can mutate self)
+        for (monster, captured_text, confidence, already_owned) in matches_to_add {
+            let new_quantity = already_owned + 1;
+
+            // Add +1 to the monster
+            self.add_monster_quantity(monster.id, 1)?;
+
+            matched_monsters.push(MatchedMonster {
+                monster,
+                captured_text,
+                confidence,
+                already_owned,
+                new_quantity,
+            });
         }
 
         Ok(CaptureResult {

@@ -44,6 +44,7 @@ windows = { version = "0.52", features = [
     "Media_Ocr",
     "Storage_Streams",
     "Foundation",
+    "Foundation_Collections",
     "Globalization",
 ] }
 parking_lot = "0.12"
@@ -75,5 +76,6 @@ windows = { version = "0.52", features = [
     "Media_Ocr",
     "Storage_Streams",
     "Foundation",
+    "Foundation_Collections",
     "Globalization",
 ] }

@@ -362,6 +362,10 @@ fn handle_hotkey_action(
                 return;
             }
         }
+        HotkeyAction::OcrCapture => {
+            // Already handled above, should never reach here
+            unreachable!("OcrCapture should be handled before this match");
+        }
     };
 
     if let Some(window) = target_window {

@@ -49,12 +49,13 @@ impl Screenshot {
 
         let mut png_data = Vec::new();
         let encoder = image::codecs::png::PngEncoder::new(&mut png_data);
+        use image::ImageEncoder;
         encoder
-            .encode(
+            .write_image(
                 &img,
                 self.width,
                 self.height,
-                image::ColorType::Rgba8,
+                image::ExtendedColorType::Rgba8,
             )
             .context("Failed to encode PNG")?;
 
