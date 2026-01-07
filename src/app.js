@@ -2705,9 +2705,9 @@ async function ocreSyncMonsters() {
     }
 }
 
-// Afficher les monstres dans la grille
+// Afficher les monstres dans la liste
 function ocreRenderMonsters() {
-    const grid = document.getElementById('ocre-monster-grid');
+    const grid = document.getElementById('ocre-monster-list');
     if (!grid) return;
 
     grid.innerHTML = '';
