@@ -1404,6 +1404,36 @@ kbd.waiting {
     min-width: auto;
 }
 
+/* File d'attente de captures */
+.ocre-queue {
+    background: var(--bg-secondary);
+    border-radius: 6px;
+    padding: 10px;
+}
+
+.ocre-queue-header {
+    margin-bottom: 8px;
+    font-size: 13px;
+}
+
+.ocre-queue-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 8px;
+    background: var(--bg-primary);
+    border-radius: 4px;
+    margin-bottom: 4px;
+    font-size: 12px;
+}
+
+.ocre-queue-info {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .ocre-main {
     flex: 1;
     display: flex;

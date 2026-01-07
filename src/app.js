@@ -3079,9 +3079,8 @@ function ocreCleanInvalidPierres() {
     ocreRenderPierres();
 }
 
-// Variable pour stocker les lignes en attente de validation
-let ocrePendingLines = null;
-let ocrePendingSignature = null;
+// File d'attente des captures en attente de validation
+let ocrePendingCaptures = []; // [{lines, signature, monsterNames}, ...]
 
 // Extraire uniquement les noms de monstres (format "Nom (niveau)")
 function ocreExtractMonsterNames(lines) {
@@ -3145,9 +3144,9 @@ function ocreExtractMonsterNames(lines) {
     });
 }
 
-// Capturer l'écran et lancer l'OCR automatiquement
+// Capturer l'écran et ajouter à la file d'attente
 async function ocreCaptureAndProcess() {
-    log('[Ocre] Début de la capture OCR automatique...');
+    log('[Ocre] Début de la capture OCR...');
 
     const resultsPanel = document.getElementById('ocre-results-panel');
     const resultsContent = document.getElementById('ocre-results-content');
@@ -3155,9 +3154,9 @@ async function ocreCaptureAndProcess() {
     if (resultsPanel) {
         resultsPanel.style.display = 'block';
     }
-    if (resultsContent) {
-        resultsContent.innerHTML = '<div class="ocre-loading">Capture en cours...</div>';
-    }
+
+    // Afficher un indicateur de capture en cours
+    ocreRenderPendingQueue('Capture en cours...');
 
     try {
         // Capturer et faire l'OCR
@@ -3165,10 +3164,7 @@ async function ocreCaptureAndProcess() {
         log('[Ocre] Lignes OCR capturées:', lines.length);
 
         if (lines.length === 0) {
-            if (resultsContent) {
-                resultsContent.innerHTML = '<div class="ocre-error">Aucun texte détecté.</div>';
-            }
-            setTimeout(ocreCloseResults, 2000);
+            ocreRenderPendingQueue(null, 'Aucun texte détecté');
             return;
         }
 
@@ -3176,119 +3172,260 @@ async function ocreCaptureAndProcess() {
         const monsterNames = ocreExtractMonsterNames(lines);
 
         if (monsterNames.length === 0) {
-            if (resultsContent) {
-                resultsContent.innerHTML = '<div class="ocre-error">Aucun monstre reconnu.</div>';
-            }
-            setTimeout(ocreCloseResults, 2000);
+            ocreRenderPendingQueue(null, 'Aucun monstre reconnu');
             return;
         }
 
         // Générer la signature pour vérification doublon
         const signature = ocreGenerateSignature(lines);
 
+        // Vérifier doublon dans les pierres déjà enregistrées
         if (signature && ocreIsDuplicatePierre(signature)) {
-            log('[Ocre] Pierre déjà capturée! (doublon détecté)');
-            if (resultsContent) {
-                resultsContent.innerHTML = '<div class="ocre-warning">⚠️ Pierre déjà capturée!</div>';
-            }
-            setTimeout(ocreCloseResults, 2000);
+            log('[Ocre] Pierre déjà enregistrée! (doublon)');
+            ocreRenderPendingQueue(null, '⚠️ Pierre déjà enregistrée!');
             return;
         }
 
-        // Stocker pour validation
-        ocrePendingLines = lines;
-        ocrePendingSignature = signature;
-
-        // Afficher uniquement les noms de monstres reconnus
-        if (resultsContent) {
-            resultsContent.innerHTML =
-                '<div class="ocre-preview">' +
-                    '<div class="ocre-preview-title">' + monsterNames.length + ' monstre(s) reconnu(s) :</div>' +
-                    '<div class="ocre-preview-text">' +
-                        monsterNames.map(n => '<div>• ' + n + '</div>').join('') +
-                    '</div>' +
-                    '<div class="ocre-preview-actions">' +
-                        '<button class="btn btn-success btn-sm" id="ocre-validate-btn">✓ Valider (Entrée)</button>' +
-                        '<button class="btn btn-secondary btn-sm" id="ocre-cancel-btn">✕ Annuler (Échap)</button>' +
-                    '</div>' +
-                '</div>';
-
-            // Event listeners pour les boutons
-            document.getElementById('ocre-validate-btn')?.addEventListener('click', ocreValidateCapture);
-            document.getElementById('ocre-cancel-btn')?.addEventListener('click', ocreCancelCapture);
-            document.getElementById('ocre-validate-btn')?.focus();
+        // Vérifier doublon dans la file d'attente actuelle
+        if (signature && ocrePendingCaptures.some(c => c.signature === signature)) {
+            log('[Ocre] Pierre déjà dans la file d\'attente!');
+            ocreRenderPendingQueue(null, '⚠️ Déjà dans la file!');
+            return;
         }
+
+        // Ajouter à la file d'attente
+        ocrePendingCaptures.push({ lines, signature, monsterNames });
+        log('[Ocre] Pierre ajoutée à la file. Total:', ocrePendingCaptures.length);
+
+        // Mettre à jour l'affichage
+        ocreRenderPendingQueue();
 
     } catch (error) {
         logError('[Ocre] Erreur lors de la capture OCR:', error);
-        if (resultsContent) {
-            resultsContent.innerHTML = '<div class="ocre-error">Erreur: ' + error + '</div>';
-        }
-        setTimeout(ocreCloseResults, 3000);
+        ocreRenderPendingQueue(null, 'Erreur: ' + error);
     }
 }
 
-// Valider la capture et traiter les monstres
-async function ocreValidateCapture() {
-    if (!ocrePendingLines) return;
+// Afficher la file d'attente des captures
+function ocreRenderPendingQueue(loadingMsg = null, errorMsg = null) {
+    const resultsContent = document.getElementById('ocre-results-content');
+    if (!resultsContent) return;
+
+    let html = '';
+
+    // Bouton capture automatique avec détection de changement
+    const isAutoCapturing = ocreAutoCaptureInterval !== null;
+    html += '<div class="ocre-auto-capture" style="margin-bottom:10px;">' +
+        '<button class="btn ' + (isAutoCapturing ? 'btn-danger' : 'btn-primary') + '" onclick="ocreToggleAutoCapture()" style="width:100%;font-size:14px;padding:12px;">' +
+            (isAutoCapturing
+                ? '⏹️ Arrêter la capture'
+                : '▶️ Démarrer capture auto') +
+        '</button>' +
+        (isAutoCapturing
+            ? '<div style="font-size:11px;text-align:center;margin-top:5px;color:#22c55e;">🔄 Détection en cours... Passez sur vos pierres</div>'
+            : '<div style="font-size:11px;text-align:center;margin-top:5px;opacity:0.7;">Détecte automatiquement les nouvelles pierres</div>') +
+    '</div>';
+
+    // Message de chargement ou erreur temporaire
+    if (loadingMsg) {
+        html += '<div class="ocre-loading">' + loadingMsg + '</div>';
+    }
+    if (errorMsg) {
+        html += '<div class="ocre-error" style="margin-bottom:10px;">' + errorMsg + '</div>';
+    }
+
+    // File d'attente
+    if (ocrePendingCaptures.length > 0) {
+        html += '<div class="ocre-queue">';
+        html += '<div class="ocre-queue-header">' +
+            '<strong>📋 ' + ocrePendingCaptures.length + ' pierre(s) en attente</strong>' +
+        '</div>';
+
+        html += '<div class="ocre-queue-list" style="max-height:150px;overflow-y:auto;">';
+        ocrePendingCaptures.forEach((capture, index) => {
+            const preview = capture.monsterNames.slice(0, 2).join(', ');
+            const more = capture.monsterNames.length > 2 ? ' +' + (capture.monsterNames.length - 2) : '';
+            html += '<div class="ocre-queue-item">' +
+                '<span class="ocre-queue-info">' +
+                    '<span class="ocre-pierre-count">' + capture.monsterNames.length + '</span> ' +
+                    preview + more +
+                '</span>' +
+                '<button class="btn btn-danger btn-xs" onclick="ocreRemoveFromQueue(' + index + ')">✕</button>' +
+            '</div>';
+        });
+        html += '</div>';
+
+        html += '<div class="ocre-queue-actions" style="margin-top:10px;display:flex;gap:5px;">' +
+            '<button class="btn btn-success" onclick="ocreValidateAllCaptures()" style="flex:1">✓ Valider tout</button>' +
+            '<button class="btn btn-secondary" onclick="ocreClearQueue()">✕ Annuler</button>' +
+        '</div>';
+        html += '</div>';
+    } else if (!loadingMsg && !errorMsg) {
+        html += '<div class="ocre-empty-hint" style="text-align:center;padding:20px;opacity:0.7;">' +
+            'Cliquez sur "Capture automatique" puis passez votre souris sur les pierres' +
+        '</div>';
+    }
+
+    resultsContent.innerHTML = html;
+}
+
+// Retirer une capture de la file
+function ocreRemoveFromQueue(index) {
+    if (index >= 0 && index < ocrePendingCaptures.length) {
+        ocrePendingCaptures.splice(index, 1);
+        ocreRenderPendingQueue();
+    }
+}
+
+// Vider la file d'attente
+function ocreClearQueue() {
+    ocrePendingCaptures = [];
+    ocreRenderPendingQueue();
+}
+
+// Valider toutes les captures en attente
+async function ocreValidateAllCaptures() {
+    if (ocrePendingCaptures.length === 0) return;
 
     const resultsContent = document.getElementById('ocre-results-content');
     if (resultsContent) {
-        resultsContent.innerHTML = '<div class="ocre-loading">Traitement...</div>';
+        resultsContent.innerHTML = '<div class="ocre-loading">Traitement de ' + ocrePendingCaptures.length + ' pierre(s)...</div>';
     }
 
+    let totalMatched = 0;
+    const minConfidence = 0.7;
+
     try {
-        const minConfidence = 0.7;
-        const result = await invoke('ocre_process_captured_text', {
-            lines: ocrePendingLines,
-            minConfidence
-        });
+        for (const capture of ocrePendingCaptures) {
+            const result = await invoke('ocre_process_captured_text', {
+                lines: capture.lines,
+                minConfidence
+            });
 
-        log('[Ocre] Résultat du traitement:', result);
-
-        // Sauvegarder la signature si des monstres ont été trouvés
-        if (result.matched_monsters && result.matched_monsters.length > 0 && ocrePendingSignature) {
-            ocreSaveSignature(ocrePendingSignature);
+            if (result.matched_monsters && result.matched_monsters.length > 0) {
+                totalMatched += result.matched_monsters.length;
+                if (capture.signature) {
+                    ocreSaveSignature(capture.signature);
+                }
+            }
         }
 
-        // Fermer le panel
-        ocreCloseResults();
+        log('[Ocre] ' + totalMatched + ' monstre(s) ajouté(s) au total');
 
-        // Recharger la progression
+        // Vider la file
+        ocrePendingCaptures = [];
+
+        // Fermer et recharger
+        ocreCloseResults();
         await ocreReloadProgress();
         ocreRenderMonsters();
         ocreUpdateStatistics();
-
-        // Petit message de confirmation
-        const count = result.matched_monsters ? result.matched_monsters.length : 0;
-        log('[Ocre] ' + count + ' monstre(s) ajouté(s)');
+        ocreRenderPierres();
 
     } catch (error) {
         logError('[Ocre] Erreur lors du traitement:', error);
         if (resultsContent) {
             resultsContent.innerHTML = '<div class="ocre-error">Erreur: ' + error + '</div>';
         }
-        setTimeout(ocreCloseResults, 2000);
-    } finally {
-        ocrePendingLines = null;
-        ocrePendingSignature = null;
     }
 }
 
-// Annuler la capture
+// Mode capture automatique avec détection de changement
+let ocreAutoCaptureInterval = null;
+let ocreAutoCaptureDelay = 1500; // 1.5 secondes
+let ocreLastCapturedSignature = null; // Pour détecter les changements
+
+function ocreStartAutoCapture() {
+    if (ocreAutoCaptureInterval) return;
+
+    log('[Ocre] Démarrage capture auto avec détection de changement');
+    ocreLastCapturedSignature = null;
+
+    // Première capture immédiate
+    ocreCaptureWithChangeDetection();
+
+    // Puis captures régulières
+    ocreAutoCaptureInterval = setInterval(() => {
+        ocreCaptureWithChangeDetection();
+    }, ocreAutoCaptureDelay);
+
+    ocreRenderPendingQueue();
+}
+
+// Capture avec détection de changement - ajoute automatiquement si nouvelle pierre
+async function ocreCaptureWithChangeDetection() {
+    try {
+        const lines = await invoke('ocre_capture_ocr_only');
+        if (lines.length === 0) return;
+
+        const monsterNames = ocreExtractMonsterNames(lines);
+        if (monsterNames.length === 0) return;
+
+        const signature = ocreGenerateSignature(lines);
+        if (!signature) return;
+
+        // Même signature que la dernière capture? On ignore
+        if (signature === ocreLastCapturedSignature) {
+            return;
+        }
+
+        // Déjà enregistrée dans les pierres? On ignore
+        if (ocreIsDuplicatePierre(signature)) {
+            ocreLastCapturedSignature = signature;
+            return;
+        }
+
+        // Déjà dans la file d'attente? On ignore
+        if (ocrePendingCaptures.some(c => c.signature === signature)) {
+            ocreLastCapturedSignature = signature;
+            return;
+        }
+
+        // Nouvelle pierre détectée !
+        log('[Ocre] Nouvelle pierre détectée:', monsterNames.length, 'monstres');
+        ocreLastCapturedSignature = signature;
+
+        ocrePendingCaptures.push({ lines, signature, monsterNames });
+        ocreRenderPendingQueue();
+
+    } catch (error) {
+        // Silencieux en mode auto
+        log('[Ocre] Erreur capture auto:', error);
+    }
+}
+
+function ocreStopAutoCapture() {
+    if (ocreAutoCaptureInterval) {
+        clearInterval(ocreAutoCaptureInterval);
+        ocreAutoCaptureInterval = null;
+        ocreLastCapturedSignature = null;
+        log('[Ocre] Capture automatique arrêtée');
+        ocreRenderPendingQueue();
+    }
+}
+
+function ocreToggleAutoCapture() {
+    if (ocreAutoCaptureInterval) {
+        ocreStopAutoCapture();
+    } else {
+        ocreStartAutoCapture();
+    }
+}
+
+// Annuler la capture (vider la file)
 function ocreCancelCapture() {
-    ocrePendingLines = null;
-    ocrePendingSignature = null;
+    ocreStopAutoCapture();
+    ocrePendingCaptures = [];
     ocreCloseResults();
 }
 
 // Écouter la touche Entrée pour valider
 document.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && ocrePendingLines) {
+    if (e.key === 'Enter' && ocrePendingCaptures.length > 0) {
         e.preventDefault();
-        ocreValidateCapture();
+        ocreValidateAllCaptures();
     }
-    if (e.key === 'Escape' && ocrePendingLines) {
+    if (e.key === 'Escape' && (ocrePendingCaptures.length > 0 || ocreAutoCaptureInterval)) {
         e.preventDefault();
         ocreCancelCapture();
     }
@@ -3461,6 +3598,10 @@ window.ocreSyncMonsters = ocreSyncMonsters;
 window.ocreClearSignatures = ocreClearSignatures;
 window.ocreDeletePierre = ocreDeletePierre;
 window.ocreCleanInvalidPierres = ocreCleanInvalidPierres;
+window.ocreToggleAutoCapture = ocreToggleAutoCapture;
+window.ocreRemoveFromQueue = ocreRemoveFromQueue;
+window.ocreClearQueue = ocreClearQueue;
+window.ocreValidateAllCaptures = ocreValidateAllCaptures;
 window.ocreCaptureAndProcess = ocreCaptureAndProcess;
 window.ocreValidateCapture = ocreValidateCapture;
 window.ocreCancelCapture = ocreCancelCapture;
