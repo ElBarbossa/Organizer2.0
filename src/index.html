@@ -139,6 +139,17 @@
                             <button class="btn btn-secondary btn-sm" onclick="ocreImportProgress()">📥 Importer</button>
                             <button class="btn btn-danger btn-sm" onclick="ocreResetProgress()">🗑️ Réinitialiser</button>
                         </div>
+
+                        <!-- Gestion des pierres capturées -->
+                        <div class="ocre-pierres-card">
+                            <h3>💎 Pierres capturées <span id="ocre-pierres-count">(0)</span></h3>
+                            <div class="ocre-pierres-list" id="ocre-pierres-list">
+                                <div class="ocre-empty-hint">Aucune pierre capturée</div>
+                            </div>
+                            <button class="btn btn-danger btn-sm" onclick="ocreClearSignatures()" style="margin-top: 8px;">
+                                🗑️ Tout effacer
+                            </button>
+                        </div>
                     </div>
 
                     <!-- Zone principale -->

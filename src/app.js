@@ -2586,6 +2586,7 @@ async function initOcre() {
         // Mettre à jour l'interface
         ocreRenderMonsters();
         ocreUpdateStatistics();
+        ocreRenderPierres();
     } catch (error) {
         logError('[Ocre] Erreur lors du chargement:', error);
     }
@@ -2929,18 +2930,37 @@ async function ocreUpdateStatistics() {
 
 // Générer une signature unique pour une pierre (ordre exact des lignes)
 function ocreGenerateSignature(lines) {
-    // Filtrer et normaliser les lignes (ignorer les lignes vides, bonus, etc.)
-    const validLines = lines
-        .map(line => line.trim().toLowerCase())
-        .filter(line => {
-            if (!line) return false;
-            // Garder uniquement les lignes avec le format "nom (niveau)"
-            if (line.includes('bonus') || line.includes('récompense')) return false;
-            if (line.includes('effets') || line.includes('poids') || line.includes('prix')) return false;
-            return line.includes('(') && line.includes(')');
-        });
-    // NE PAS trier - l'ordre exact est important pour différencier les pierres
+    // Mots-clés à exclure (UI, bonus, etc.)
+    const excludeKeywords = [
+        'bonus', 'récompense', 'effets', 'poids', 'prix', 'kamas',
+        'niveau', 'level', 'xp', 'experience', 'points',
+        'fermer', 'annuler', 'valider', 'ok', 'retour',
+        'inventaire', 'équipement', 'options', 'paramètres'
+    ];
 
+    // Pattern strict pour "Nom (niveau)" où niveau est 1-400
+    const monsterPattern = /^(.+?)\s*\((\d{1,3})\)$/;
+
+    // Filtrer et normaliser les lignes
+    const validLines = lines
+        .map(line => line.trim())
+        .filter(line => {
+            if (!line || line.length < 4) return false;
+
+            const lower = line.toLowerCase();
+            if (excludeKeywords.some(kw => lower.includes(kw))) return false;
+
+            const match = line.match(monsterPattern);
+            if (!match) return false;
+
+            const level = parseInt(match[2], 10);
+            if (level < 1 || level > 400) return false;
+
+            return true;
+        })
+        .map(line => line.toLowerCase()); // Normaliser pour la signature
+
+    // NE PAS trier - l'ordre exact est important pour différencier les pierres
     // Créer une signature en joignant les lignes dans l'ordre exact
     return validLines.join('|');
 }
@@ -2964,6 +2984,57 @@ function ocreClearSignatures() {
     ocreCapturedSignatures = [];
     localStorage.setItem('ocre_captured_signatures', '[]');
     log('[Ocre] Historique des signatures effacé');
+    ocreRenderPierres();
+}
+
+// Supprimer une pierre spécifique par son index
+function ocreDeletePierre(index) {
+    if (index >= 0 && index < ocreCapturedSignatures.length) {
+        const removed = ocreCapturedSignatures.splice(index, 1);
+        localStorage.setItem('ocre_captured_signatures', JSON.stringify(ocreCapturedSignatures));
+        log('[Ocre] Pierre supprimée:', removed[0]?.substring(0, 30) + '...');
+        ocreRenderPierres();
+    }
+}
+
+// Afficher la liste des pierres capturées
+function ocreRenderPierres() {
+    const container = document.getElementById('ocre-pierres-list');
+    const countSpan = document.getElementById('ocre-pierres-count');
+
+    if (!container) return;
+
+    const count = ocreCapturedSignatures.length;
+    if (countSpan) {
+        countSpan.textContent = '(' + count + ')';
+    }
+
+    if (count === 0) {
+        container.innerHTML = '<div class="ocre-empty-hint">Aucune pierre capturée</div>';
+        return;
+    }
+
+    let html = '';
+    ocreCapturedSignatures.forEach((sig, index) => {
+        // Extraire les noms de monstres de la signature
+        const monsters = sig.split('|').map(line => {
+            const match = line.match(/^(.+?)\s*\(\d+\)$/);
+            return match ? match[1].trim() : line.split('(')[0].trim();
+        }).filter(n => n);
+
+        const preview = monsters.slice(0, 3).join(', ');
+        const more = monsters.length > 3 ? ' +' + (monsters.length - 3) : '';
+
+        html += '<div class="ocre-pierre-item">' +
+            '<span class="ocre-pierre-info" title="' + monsters.join(', ') + '">' +
+                '<span class="ocre-pierre-count">' + monsters.length + ' mob(s)</span> ' +
+                preview + more +
+            '</span>' +
+            '<button class="btn btn-danger btn-xs" onclick="ocreDeletePierre(' + index + ')" title="Supprimer">✕</button>' +
+        '</div>';
+    });
+
+    container.innerHTML = html;
 }
 
 // Variable pour stocker les lignes en attente de validation
@@ -2972,22 +3043,64 @@ let ocrePendingSignature = null;
 
 // Extraire uniquement les noms de monstres (format "Nom (niveau)")
 function ocreExtractMonsterNames(lines) {
-    return lines
+    // Mots-clés à exclure (UI, bonus, etc.)
+    const excludeKeywords = [
+        'bonus', 'récompense', 'effets', 'poids', 'prix', 'kamas',
+        'niveau', 'level', 'xp', 'experience', 'points',
+        'fermer', 'annuler', 'valider', 'ok', 'retour',
+        'inventaire', 'équipement', 'options', 'paramètres',
+        'groupe', 'guilde', 'alliance', 'amis', 'contacts',
+        'quête', 'mission', 'objectif', 'succès',
+        'combat', 'tour', 'pa ', 'pm ', ' pa', ' pm',
+        'vie', 'énergie', 'pods', 'poids'
+    ];
+
+    // Pattern strict pour "Nom (niveau)" où niveau est entre 1 et 400
+    const monsterPattern = /^(.+?)\s*\((\d{1,3})\)$/;
+
+    const candidates = lines
         .map(line => line.trim())
         .filter(line => {
-            if (!line) return false;
-            // Ignorer les lignes bonus, prix, etc.
+            if (!line || line.length < 4) return false;
+
             const lower = line.toLowerCase();
-            if (lower.includes('bonus') || lower.includes('récompense')) return false;
-            if (lower.includes('effets') || lower.includes('poids') || lower.includes('prix')) return false;
-            // Garder les lignes avec format "Nom (niveau)"
-            return line.includes('(') && line.includes(')');
-        })
-        .map(line => {
-            // Extraire juste le nom sans le niveau
-            const match = line.match(/^(.+?)\s*\(\d+\)$/);
+
+            // Exclure les lignes avec des mots-clés UI
+            if (excludeKeywords.some(kw => lower.includes(kw))) return false;
+
+            // Vérifier le pattern strict
+            const match = line.match(monsterPattern);
+            if (!match) return false;
+
+            // Vérifier que le niveau est raisonnable (1-400)
+            const level = parseInt(match[2], 10);
+            if (level < 1 || level > 400) return false;
+
+            // Le nom doit avoir au moins 2 caractères
+            const name = match[1].trim();
+            if (name.length < 2) return false;
+
+            // Exclure si le nom contient des caractères suspects
+            if (/[<>{}[\]|\\]/.test(name)) return false;
+
+            return true;
+        });
+
+    // Trouver la plus longue séquence consécutive de candidats
+    // (les monstres dans une pierre sont toujours consécutifs)
+    if (candidates.length <= 2) {
+        // Peu de candidats, on les garde tous
+        return candidates.map(line => {
+            const match = line.match(monsterPattern);
             return match ? match[1].trim() : line;
         });
+    }
+
+    // Pour plus de 2 candidats, on extrait juste les noms
+    return candidates.map(line => {
+        const match = line.match(monsterPattern);
+        return match ? match[1].trim() : line;
+    });
 }
 
 // Capturer l'écran et lancer l'OCR automatiquement
@@ -3304,6 +3417,7 @@ async function ocreResetProgress() {
 // Exposer les fonctions Ocre globalement
 window.ocreSyncMonsters = ocreSyncMonsters;
 window.ocreClearSignatures = ocreClearSignatures;
+window.ocreDeletePierre = ocreDeletePierre;
 window.ocreCaptureAndProcess = ocreCaptureAndProcess;
 window.ocreValidateCapture = ocreValidateCapture;
 window.ocreCancelCapture = ocreCancelCapture;
