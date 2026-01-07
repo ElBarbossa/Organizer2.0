@@ -478,6 +478,14 @@ fn ocre_fetch_monsters(state: tauri::State<AppState>, api_key: String) -> Result
         .map_err(|e| format!("Failed to fetch monsters: {}", e))
 }
 
+/// Sync user monsters from Metamob (includes quantities)
+#[tauri::command]
+fn ocre_sync_user_monsters(state: tauri::State<AppState>, api_key: String, pseudo: String) -> Result<usize, String> {
+    state.ocre_manager.lock()
+        .sync_user_monsters(&api_key, &pseudo)
+        .map_err(|e| format!("Failed to sync user monsters: {}", e))
+}
+
 /// Get all cached monsters
 #[tauri::command]
 fn ocre_get_monsters(state: tauri::State<AppState>) -> Result<Vec<Monster>, String> {
@@ -733,6 +741,7 @@ fn main() {
             read_clipboard,
             // Ocre commands
             ocre_fetch_monsters,
+            ocre_sync_user_monsters,
             ocre_get_monsters,
             ocre_get_monsters_by_type,
             ocre_get_monster_quantity,

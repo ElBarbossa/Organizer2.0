@@ -41,6 +41,8 @@ pub struct OcreData {
     pub progress: HashMap<i32, MonsterProgress>, // User's progress
     pub last_sync: Option<String>,        // Last sync date with Metamob
     pub api_key: Option<String>,          // Metamob API key (optional, for sync)
+    #[serde(default)]
+    pub pseudo: Option<String>,           // Metamob username for user sync
 }
 
 impl Default for OcreData {
@@ -50,6 +52,7 @@ impl Default for OcreData {
             progress: HashMap::new(),
             last_sync: None,
             api_key: None,
+            pseudo: None,
         }
     }
 }
@@ -123,30 +126,139 @@ impl OcreManager {
     /// Fetch monster list from Metamob API
     pub fn fetch_monsters_from_api(&mut self, api_key: &str) -> Result<usize> {
         println!("[OcreManager] Fetching monsters from Metamob API...");
+        println!("[OcreManager] API Key (masked): {}...", &api_key.chars().take(8).collect::<String>());
 
-        let client = reqwest::blocking::Client::new();
+        let client = reqwest::blocking::Client::builder()
+            .user_agent("Organizer2.0/1.0")
+            .build()
+            .context("Failed to create HTTP client")?;
+
+        let url = "https://api.metamob.fr/monstres";
+        println!("[OcreManager] Calling: GET {}", url);
+
         let response = client
-            .get("https://api.metamob.fr/monstres")
+            .get(url)
             .header("HTTP-X-APIKEY", api_key)
             .send()
-            .context("Failed to call Metamob API")?;
+            .context("Failed to call Metamob API - network error")?;
 
-        if !response.status().is_success() {
+        let status = response.status();
+        println!("[OcreManager] Response status: {}", status);
+
+        if !status.is_success() {
+            let error_body = response.text().unwrap_or_default();
+            println!("[OcreManager] Error response: {}", error_body);
             return Err(anyhow::anyhow!(
                 "Metamob API error: {} - {}",
-                response.status(),
-                response.text().unwrap_or_default()
+                status,
+                error_body
             ));
         }
 
-        let monsters: Vec<Monster> = response.json()
-            .context("Failed to parse monster list from API")?;
+        let body = response.text().context("Failed to read response body")?;
+        println!("[OcreManager] Response length: {} bytes", body.len());
+
+        let monsters: Vec<Monster> = serde_json::from_str(&body)
+            .context("Failed to parse monster list from API - JSON format may have changed")?;
 
         let count = monsters.len();
         println!("[OcreManager] Fetched {} monsters from Metamob", count);
 
         self.data.monsters = monsters;
         self.data.api_key = Some(api_key.to_string());
+        self.data.last_sync = Some(chrono_now());
+
+        self.save_data()?;
+
+        Ok(count)
+    }
+
+    /// Sync user's monsters from Metamob (with quantities)
+    pub fn sync_user_monsters(&mut self, api_key: &str, pseudo: &str) -> Result<usize> {
+        println!("[OcreManager] Syncing user monsters for '{}'...", pseudo);
+
+        let client = reqwest::blocking::Client::builder()
+            .user_agent("Organizer2.0/1.0")
+            .build()
+            .context("Failed to create HTTP client")?;
+
+        let url = format!("https://api.metamob.fr/utilisateurs/{}/monstres", pseudo);
+        println!("[OcreManager] Calling: GET {}", url);
+
+        let response = client
+            .get(&url)
+            .header("HTTP-X-APIKEY", api_key)
+            .send()
+            .context("Failed to call Metamob API - network error")?;
+
+        let status = response.status();
+        println!("[OcreManager] Response status: {}", status);
+
+        if !status.is_success() {
+            let error_body = response.text().unwrap_or_default();
+            println!("[OcreManager] Error response: {}", error_body);
+            return Err(anyhow::anyhow!(
+                "Metamob API error: {} - {}",
+                status,
+                error_body
+            ));
+        }
+
+        // Response includes quantite field for user monsters
+        #[derive(Deserialize)]
+        struct UserMonster {
+            id: i32,
+            nom: String,
+            slug: String,
+            #[serde(rename = "type")]
+            monster_type: String,
+            image_url: String,
+            etape: i32,
+            zone: String,
+            souszone: String,
+            #[serde(default)]
+            nom_normal: Option<String>,
+            #[serde(default)]
+            quantite: i32,
+        }
+
+        let body = response.text().context("Failed to read response body")?;
+        let user_monsters: Vec<UserMonster> = serde_json::from_str(&body)
+            .context("Failed to parse user monsters from API")?;
+
+        let count = user_monsters.len();
+        println!("[OcreManager] Fetched {} user monsters from Metamob", count);
+
+        // Update monsters list and progress
+        self.data.monsters.clear();
+        self.data.progress.clear();
+
+        for um in user_monsters {
+            // Add to monsters list
+            self.data.monsters.push(Monster {
+                id: um.id,
+                nom: um.nom,
+                slug: um.slug,
+                monster_type: um.monster_type,
+                image_url: um.image_url,
+                etape: um.etape,
+                zone: um.zone,
+                souszone: um.souszone,
+                nom_normal: um.nom_normal,
+            });
+
+            // Add to progress if quantity > 0
+            if um.quantite > 0 {
+                self.data.progress.insert(um.id, MonsterProgress {
+                    id: um.id,
+                    quantite: um.quantite,
+                    captured_dates: Vec::new(),
+                });
+            }
+        }
+
+        self.data.api_key = Some(api_key.to_string());
+        self.data.pseudo = Some(pseudo.to_string());
         self.data.last_sync = Some(chrono_now());
 
         self.save_data()?;
