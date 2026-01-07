@@ -3332,7 +3332,7 @@ async function ocreValidateAllCaptures() {
 
 // Mode capture automatique avec détection de changement
 let ocreAutoCaptureInterval = null;
-let ocreAutoCaptureDelay = 600; // 0.6 seconde (plus rapide)
+let ocreAutoCaptureDelay = 350; // 0.35 seconde (très rapide)
 let ocreLastCapturedSignature = null; // Pour détecter les changements
 let ocreIsCapturing = false; // Éviter les captures simultanées
 
