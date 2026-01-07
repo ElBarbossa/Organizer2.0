@@ -677,7 +677,11 @@ fn ocre_get_progress(state: tauri::State<AppState>) -> Result<Vec<ocre_manager::
 
 /// Register OCR capture hotkey
 #[tauri::command]
-fn ocre_register_hotkey(state: tauri::State<AppState>, key_code: u32) -> Result<(), String> {
+fn ocre_register_hotkey(
+    state: tauri::State<AppState>,
+    app_handle: AppHandle,
+    key_code: u32
+) -> Result<(), String> {
     let manager = state.hotkey_manager.lock();
 
     // Use a special ID for OCR hotkey (negative to avoid collision with window hotkeys)
@@ -694,7 +698,21 @@ fn ocre_register_hotkey(state: tauri::State<AppState>, key_code: u32) -> Result<
         action: HotkeyAction::OcrCapture,
     }).map_err(|e| format!("Failed to register OCR hotkey: {}", e))?;
 
-    println!("[Ocre] OCR capture hotkey registered with key code 0x{:X}", key_code);
+    // Set up the callback for hotkey events (including OCR)
+    let window_list = Arc::clone(&state.window_list);
+    let excluded_windows = Arc::clone(&state.excluded_windows);
+    let current_profile = Arc::clone(&state.current_profile);
+    let app_handle_clone = app_handle.clone();
+    manager.set_callback(move |action| {
+        handle_hotkey_action(action, &window_list, &excluded_windows, &current_profile, &app_handle_clone);
+    });
+
+    // Start listening for hotkeys (safe to call multiple times)
+    manager
+        .start_listening()
+        .map_err(|e| format!("Failed to start listening: {}", e))?;
+
+    println!("[Ocre] OCR capture hotkey registered with key code 0x{:X} and listening started", key_code);
     Ok(())
 }
 
