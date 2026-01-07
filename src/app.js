@@ -2523,7 +2523,7 @@ log('  - window.minimizeToTray:', typeof window.minimizeToTray);
 
 let ocreMonsters = [];
 let ocreProgress = {};
-let ocreCurrentFilter = { type: 'all', search: '', etape: 'all' };
+let ocreCurrentFilter = { type: 'all', search: '', status: 'all' };
 let ocreCaptureHotkey = localStorage.getItem('ocre_capture_hotkey') || 'F8';
 let ocreCapturedSignatures = JSON.parse(localStorage.getItem('ocre_captured_signatures') || '[]');
 
@@ -2577,9 +2577,12 @@ async function initOcre() {
     // Configurer les event listeners
     setupOcreEventListeners();
 
-    // Enregistrer le hotkey global au démarrage
+    // Enregistrer le hotkey global au démarrage (avec délai pour s'assurer que le backend est prêt)
+    log('[Ocre] Attente du backend...');
+    await new Promise(resolve => setTimeout(resolve, 500));
     log('[Ocre] Enregistrement du hotkey au démarrage:', ocreCaptureHotkey);
-    await ocreRegisterHotkey(ocreCaptureHotkey);
+    const hotkeyResult = await ocreRegisterHotkey(ocreCaptureHotkey);
+    log('[Ocre] Résultat enregistrement hotkey:', hotkeyResult);
 
     // Écouter l'événement de hotkey depuis le backend
     if (listen) {
@@ -2613,7 +2616,7 @@ async function ocreRegisterHotkey(keyName) {
 // Configuration des event listeners pour l'Ocre
 function setupOcreEventListeners() {
     // Filtre par type
-    const typeFilter = document.getElementById('ocre-filter-type');
+    const typeFilter = document.getElementById('ocre-type-filter');
     if (typeFilter) {
         typeFilter.addEventListener('change', (e) => {
             ocreCurrentFilter.type = e.target.value;
@@ -2621,11 +2624,11 @@ function setupOcreEventListeners() {
         });
     }
 
-    // Filtre par étape
-    const etapeFilter = document.getElementById('ocre-filter-etape');
-    if (etapeFilter) {
-        etapeFilter.addEventListener('change', (e) => {
-            ocreCurrentFilter.etape = e.target.value;
+    // Filtre par statut (owned/missing)
+    const statusFilter = document.getElementById('ocre-status-filter');
+    if (statusFilter) {
+        statusFilter.addEventListener('change', (e) => {
+            ocreCurrentFilter.status = e.target.value;
             ocreFilterMonsters();
         });
     }
@@ -2813,22 +2816,26 @@ function ocreRenderMonsters() {
 // Obtenir les monstres filtrés
 function ocreGetFilteredMonsters() {
     return ocreMonsters.filter(monster => {
-        // Filtre par type
-        if (ocreCurrentFilter.type !== 'all' && monster.monster_type !== ocreCurrentFilter.type) {
+        // Filtre par type (monstre/archimonstre/boss)
+        const type = monster.monster_type || monster.type || 'monstre';
+        if (ocreCurrentFilter.type !== 'all' && type !== ocreCurrentFilter.type) {
             return false;
         }
 
-        // Filtre par étape
-        if (ocreCurrentFilter.etape !== 'all' && monster.etape !== parseInt(ocreCurrentFilter.etape)) {
-            return false;
+        // Filtre par statut (possédé/manquant)
+        if (ocreCurrentFilter.status !== 'all') {
+            const qty = ocreProgress[monster.id]?.quantite || 0;
+            if (ocreCurrentFilter.status === 'owned' && qty === 0) return false;
+            if (ocreCurrentFilter.status === 'missing' && qty > 0) return false;
         }
 
         // Filtre par recherche
         if (ocreCurrentFilter.search) {
             const searchLower = ocreCurrentFilter.search.toLowerCase();
-            if (!monster.nom.toLowerCase().includes(searchLower) &&
-                !monster.zone.toLowerCase().includes(searchLower) &&
-                !monster.souszone.toLowerCase().includes(searchLower)) {
+            const nom = (monster.nom || '').toLowerCase();
+            const zone = (monster.zone || '').toLowerCase();
+            const souszone = (monster.souszone || '').toLowerCase();
+            if (!nom.includes(searchLower) && !zone.includes(searchLower) && !souszone.includes(searchLower)) {
                 return false;
             }
         }
@@ -2891,8 +2898,8 @@ async function ocreUpdateStatistics() {
         }
 
         // Archimonstres
-        const archisProgress = document.getElementById('ocre-archis-progress');
-        const archisBar = document.getElementById('ocre-archis-bar');
+        const archisProgress = document.getElementById('ocre-archimonstres-progress');
+        const archisBar = document.getElementById('ocre-archimonstres-bar');
         if (archisProgress && archisBar) {
             archisProgress.textContent = stats.captured_archimonstres + '/' + stats.total_archimonstres;
             archisBar.style.width = stats.progress_archimonstres.toFixed(1) + '%';
@@ -2903,7 +2910,7 @@ async function ocreUpdateStatistics() {
     }
 }
 
-// Générer une signature unique pour une pierre (basée sur les lignes triées)
+// Générer une signature unique pour une pierre (ordre exact des lignes)
 function ocreGenerateSignature(lines) {
     // Filtrer et normaliser les lignes (ignorer les lignes vides, bonus, etc.)
     const validLines = lines
@@ -2914,10 +2921,10 @@ function ocreGenerateSignature(lines) {
             if (line.includes('bonus') || line.includes('récompense')) return false;
             if (line.includes('effets') || line.includes('poids') || line.includes('prix')) return false;
             return line.includes('(') && line.includes(')');
-        })
-        .sort();
+        });
+    // NE PAS trier - l'ordre exact est important pour différencier les pierres
 
-    // Créer une signature en joignant les lignes triées
+    // Créer une signature en joignant les lignes dans l'ordre exact
     return validLines.join('|');
 }
 
