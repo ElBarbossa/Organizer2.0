@@ -597,12 +597,16 @@ fn ocre_capture_region(x: i32, y: i32, width: u32, height: u32) -> Result<String
 
 /// Capture foreground window and perform OCR only (without processing)
 #[tauri::command]
-fn ocre_capture_ocr_only() -> Result<Vec<String>, String> {
+async fn ocre_capture_ocr_only() -> Result<Vec<String>, String> {
     println!("[Ocre] Starting capture OCR only...");
 
-    // Capture and perform OCR
-    let lines = screen_capture::capture_and_ocr()
-        .map_err(|e| format!("Failed to capture and OCR: {}", e))?;
+    // Run OCR in a blocking thread to avoid freezing the UI
+    let lines = tauri::async_runtime::spawn_blocking(|| {
+        screen_capture::capture_and_ocr()
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
+    .map_err(|e| format!("Failed to capture and OCR: {}", e))?;
 
     println!("[Ocre] OCR extracted {} lines", lines.len());
     Ok(lines)
@@ -610,15 +614,19 @@ fn ocre_capture_ocr_only() -> Result<Vec<String>, String> {
 
 /// Capture foreground window and perform OCR recognition
 #[tauri::command]
-fn ocre_capture_and_recognize(
-    state: tauri::State<AppState>,
+async fn ocre_capture_and_recognize(
+    state: tauri::State<'_, AppState>,
     min_confidence: f64,
 ) -> Result<CaptureResult, String> {
     println!("[Ocre] Starting capture and recognize...");
 
-    // Capture and perform OCR
-    let lines = screen_capture::capture_and_ocr()
-        .map_err(|e| format!("Failed to capture and OCR: {}", e))?;
+    // Run OCR in a blocking thread to avoid freezing the UI
+    let lines = tauri::async_runtime::spawn_blocking(|| {
+        screen_capture::capture_and_ocr()
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
+    .map_err(|e| format!("Failed to capture and OCR: {}", e))?;
 
     println!("[Ocre] OCR extracted {} lines", lines.len());
 
@@ -630,8 +638,8 @@ fn ocre_capture_and_recognize(
 
 /// Capture a specific region and perform OCR recognition
 #[tauri::command]
-fn ocre_capture_region_and_recognize(
-    state: tauri::State<AppState>,
+async fn ocre_capture_region_and_recognize(
+    state: tauri::State<'_, AppState>,
     x: i32,
     y: i32,
     width: u32,
@@ -640,9 +648,13 @@ fn ocre_capture_region_and_recognize(
 ) -> Result<CaptureResult, String> {
     println!("[Ocre] Starting region capture and recognize at ({}, {}) {}x{}...", x, y, width, height);
 
-    // Capture and perform OCR on region
-    let lines = screen_capture::capture_region_and_ocr(x, y, width, height)
-        .map_err(|e| format!("Failed to capture region and OCR: {}", e))?;
+    // Run OCR in a blocking thread to avoid freezing the UI
+    let lines = tauri::async_runtime::spawn_blocking(move || {
+        screen_capture::capture_region_and_ocr(x, y, width, height)
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
+    .map_err(|e| format!("Failed to capture region and OCR: {}", e))?;
 
     println!("[Ocre] OCR extracted {} lines", lines.len());
 
