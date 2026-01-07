@@ -3107,9 +3107,9 @@ async function ocreConfigureZone() {
         ocreScreenDimensions = [1920, 1080]; // Fallback
     }
 
-    // Prendre une capture d'écran pour le fond
+    // Prendre une capture plein écran pour le fond
     try {
-        const base64 = await invoke('ocre_capture_screenshot');
+        const base64 = await invoke('ocre_capture_fullscreen');
         const canvas = document.getElementById('ocre-zone-canvas');
         const container = document.getElementById('ocre-zone-canvas-container');
         const ctx = canvas.getContext('2d');

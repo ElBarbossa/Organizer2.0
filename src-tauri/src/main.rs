@@ -585,6 +585,16 @@ fn ocre_capture_screenshot() -> Result<String, String> {
         .map_err(|e| format!("Failed to convert to base64: {}", e))
 }
 
+/// Capture full screen for zone configuration
+#[tauri::command]
+fn ocre_capture_fullscreen() -> Result<String, String> {
+    let screenshot = screen_capture::capture_fullscreen()
+        .map_err(|e| format!("Failed to capture fullscreen: {}", e))?;
+
+    screenshot.to_base64_png()
+        .map_err(|e| format!("Failed to convert to base64: {}", e))
+}
+
 /// Capture a specific region of the screen
 #[tauri::command]
 fn ocre_capture_region(x: i32, y: i32, width: u32, height: u32) -> Result<String, String> {
@@ -822,6 +832,7 @@ fn main() {
             ocre_export_progress,
             ocre_import_progress,
             ocre_capture_screenshot,
+            ocre_capture_fullscreen,
             ocre_capture_region,
             ocre_capture_ocr_only,
             ocre_capture_and_recognize,
