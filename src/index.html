@@ -109,18 +109,18 @@
                                 <input type="password" id="ocre-api-key" class="input-field" placeholder="Votre clé API...">
                             </div>
                             <button class="btn btn-primary btn-sm" onclick="ocreSyncMonsters()">
-                                🔄 Synchroniser les monstres
+                                📥 Récupérer la liste des monstres
                             </button>
-                            <small id="ocre-last-sync" class="text-muted">Jamais synchronisé</small>
                         </div>
 
                         <!-- Actions -->
                         <div class="ocre-actions-card">
                             <h3>⚡ Capture OCR</h3>
-                            <div class="input-group-small">
-                                <label for="ocre-capture-key">Touche de capture:</label>
-                                <kbd id="ocre-capture-hotkey">F10</kbd>
-                                <button class="btn btn-secondary btn-sm" onclick="configureOcreCaptureHotkey()">🔧</button>
+                            <div class="ocre-hotkey-config">
+                                <span>Touche de capture:</span>
+                                <button class="btn btn-secondary btn-sm ocre-hotkey-btn" id="ocre-capture-hotkey-btn" onclick="configureOcreCaptureHotkey()">
+                                    <kbd id="ocre-capture-hotkey-display">F10</kbd>
+                                </button>
                             </div>
                             <button class="btn btn-success" onclick="ocreCaptureAndProcess()">
                                 📸 Capturer maintenant

@@ -2638,30 +2638,70 @@ function setupOcreEventListeners() {
         });
     }
 
-    // Hotkey de capture
-    const hotkeyInput = document.getElementById('ocre-capture-hotkey');
-    if (hotkeyInput) {
-        hotkeyInput.addEventListener('keydown', async (e) => {
-            e.preventDefault();
-            const keyName = e.key.toUpperCase();
-
-            // Vérifier si la touche est supportée
-            if (!keyToVkCode[keyName]) {
-                alert('Touche non supportée. Utilisez F1-F12, Insert, Delete, Home, End, PageUp/Down ou le pavé numérique.');
-                return;
-            }
-
-            ocreCaptureHotkey = keyName;
-            hotkeyInput.value = ocreCaptureHotkey;
-            localStorage.setItem('ocre_capture_hotkey', ocreCaptureHotkey);
-
-            // Enregistrer le nouveau hotkey global
-            const success = await ocreRegisterHotkey(ocreCaptureHotkey);
-            if (success) {
-                log('[Ocre] Hotkey de capture changé:', ocreCaptureHotkey);
-            }
-        });
+    // Afficher la touche actuelle
+    const hotkeyDisplay = document.getElementById('ocre-capture-hotkey-display');
+    if (hotkeyDisplay) {
+        hotkeyDisplay.textContent = ocreCaptureHotkey;
     }
+}
+
+// Variable pour savoir si on attend une touche
+let ocreWaitingForHotkey = false;
+
+// Configurer la touche de capture
+async function configureOcreCaptureHotkey() {
+    const btn = document.getElementById('ocre-capture-hotkey-btn');
+    const display = document.getElementById('ocre-capture-hotkey-display');
+
+    if (!btn || !display) return;
+
+    // Activer le mode écoute
+    ocreWaitingForHotkey = true;
+    btn.classList.add('listening');
+    display.textContent = '...';
+
+    // Écouter la prochaine touche
+    const handleKey = async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (!ocreWaitingForHotkey) return;
+
+        const keyName = e.key.toUpperCase();
+
+        // Échap pour annuler
+        if (keyName === 'ESCAPE') {
+            ocreWaitingForHotkey = false;
+            btn.classList.remove('listening');
+            display.textContent = ocreCaptureHotkey;
+            document.removeEventListener('keydown', handleKey, true);
+            return;
+        }
+
+        // Vérifier si la touche est supportée
+        if (!keyToVkCode[keyName]) {
+            alert('Touche non supportée. Utilisez F1-F12, Insert, Delete, Home, End, PageUp/Down ou le pavé numérique.');
+            return;
+        }
+
+        // Configurer la nouvelle touche
+        ocreCaptureHotkey = keyName;
+        display.textContent = ocreCaptureHotkey;
+        localStorage.setItem('ocre_capture_hotkey', ocreCaptureHotkey);
+
+        // Enregistrer le nouveau hotkey global
+        const success = await ocreRegisterHotkey(ocreCaptureHotkey);
+        if (success) {
+            log('[Ocre] Hotkey de capture changé:', ocreCaptureHotkey);
+        }
+
+        // Désactiver le mode écoute
+        ocreWaitingForHotkey = false;
+        btn.classList.remove('listening');
+        document.removeEventListener('keydown', handleKey, true);
+    };
+
+    document.addEventListener('keydown', handleKey, true);
 }
 
 // Synchroniser avec l'API Metamob
