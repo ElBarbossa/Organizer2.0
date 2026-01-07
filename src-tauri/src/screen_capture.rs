@@ -69,14 +69,103 @@ impl Screenshot {
     }
 }
 
-/// Capture the foreground window
+/// Capture the entire primary screen
 pub fn capture_foreground_window() -> Result<Screenshot> {
     unsafe {
-        let hwnd = GetForegroundWindow();
-        if hwnd.0 == 0 {
-            return Err(anyhow::anyhow!("No foreground window found"));
+        use windows::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_CXSCREEN, SM_CYSCREEN};
+
+        let width = GetSystemMetrics(SM_CXSCREEN) as u32;
+        let height = GetSystemMetrics(SM_CYSCREEN) as u32;
+
+        if width == 0 || height == 0 {
+            return Err(anyhow::anyhow!("Failed to get screen dimensions"));
         }
-        capture_window(hwnd)
+
+        println!("[ScreenCapture] Capturing entire screen: {}x{}", width, height);
+
+        // Get device context for the entire screen
+        let hdc_screen = GetDC(HWND(0)); // 0 = entire screen
+        if hdc_screen.0 == 0 {
+            return Err(anyhow::anyhow!("Failed to get screen DC"));
+        }
+
+        let hdc_mem = CreateCompatibleDC(hdc_screen);
+        if hdc_mem.0 == 0 {
+            ReleaseDC(HWND(0), hdc_screen);
+            return Err(anyhow::anyhow!("Failed to create compatible DC"));
+        }
+
+        let hbm = CreateCompatibleBitmap(hdc_screen, width as i32, height as i32);
+        if hbm.0 == 0 {
+            DeleteDC(hdc_mem);
+            ReleaseDC(HWND(0), hdc_screen);
+            return Err(anyhow::anyhow!("Failed to create compatible bitmap"));
+        }
+
+        let old_obj = SelectObject(hdc_mem, hbm);
+
+        // Copy the entire screen
+        let _ = BitBlt(
+            hdc_mem,
+            0,
+            0,
+            width as i32,
+            height as i32,
+            hdc_screen,
+            0,
+            0,
+            SRCCOPY,
+        );
+
+        // Prepare bitmap info
+        let mut bmi = BITMAPINFO {
+            bmiHeader: BITMAPINFOHEADER {
+                biSize: mem::size_of::<BITMAPINFOHEADER>() as u32,
+                biWidth: width as i32,
+                biHeight: -(height as i32), // Negative for top-down
+                biPlanes: 1,
+                biBitCount: 32,
+                biCompression: BI_RGB.0 as u32,
+                biSizeImage: 0,
+                biXPelsPerMeter: 0,
+                biYPelsPerMeter: 0,
+                biClrUsed: 0,
+                biClrImportant: 0,
+            },
+            bmiColors: [Default::default()],
+        };
+
+        // Allocate buffer for pixel data
+        let mut data = vec![0u8; (width * height * 4) as usize];
+
+        // Get the bitmap bits
+        let result = GetDIBits(
+            hdc_mem,
+            hbm,
+            0,
+            height,
+            Some(data.as_mut_ptr() as *mut _),
+            &mut bmi,
+            DIB_RGB_COLORS,
+        );
+
+        // Cleanup
+        SelectObject(hdc_mem, old_obj);
+        DeleteObject(hbm);
+        DeleteDC(hdc_mem);
+        ReleaseDC(HWND(0), hdc_screen);
+
+        if result == 0 {
+            return Err(anyhow::anyhow!("Failed to get bitmap bits"));
+        }
+
+        println!("[ScreenCapture] Captured {} bytes of screen data", data.len());
+
+        Ok(Screenshot {
+            width,
+            height,
+            data,
+        })
     }
 }
 
