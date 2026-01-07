@@ -755,11 +755,16 @@ function renderWindowList() {
     updateSpacePasteWindowSelect();
 }
 
-// Show/Hide Apply Order button
-function toggleApplyOrderButton(show) {
+// Enable/Disable Apply Order button
+function toggleApplyOrderButton(enabled) {
     const applyBtn = document.getElementById('apply-order-btn');
     if (applyBtn) {
-        applyBtn.style.display = show ? 'flex' : 'none';
+        applyBtn.disabled = !enabled;
+        if (enabled) {
+            applyBtn.classList.add('has-changes');
+        } else {
+            applyBtn.classList.remove('has-changes');
+        }
     }
 }
 
@@ -767,7 +772,7 @@ function toggleApplyOrderButton(show) {
 function markOrderChanged() {
     orderChanged = true;
     toggleApplyOrderButton(true);
-    updateStatusText('Ordre modifié - Cliquez sur "Appliquer l\'Ordre" pour mettre à jour la barre des tâches');
+    updateStatusText('Ordre modifié - Cliquez sur "Appliquer à la taskbar"');
 
     // Reset profile selector to "Personnalisé" when order is changed via drag & drop or arrows
     const profileSelect = document.getElementById('window-profile-select');

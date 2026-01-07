@@ -556,10 +556,23 @@ body {
     color: white;
     white-space: normal;
     min-height: 36px;
+    transition: all 0.3s ease;
+}
+
+.sidebar-btn-success:disabled {
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    cursor: not-allowed;
+    opacity: 0.6;
+    transform: none;
+    box-shadow: none;
+}
+
+.sidebar-btn-success.has-changes {
     animation: pulse-border 2s ease-in-out infinite;
 }
 
-.sidebar-btn-success:hover {
+.sidebar-btn-success:not(:disabled):hover {
     background: #3ea716;
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(82, 196, 26, 0.4);

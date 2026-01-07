@@ -32,7 +32,7 @@
                     <div class="window-list-container">
                         <div class="window-list-header">
                             <h3>🪟 Fenêtres Dofus</h3>
-                            <span class="help-icon-inline" title="Glissez-déposez les fenêtres pour les réorganiser. Cliquez sur 'Appliquer l'Ordre' pour mettre à jour la barre des tâches.">💡</span>
+                            <span class="help-icon-inline" title="1. Scanner : Détecte les fenêtres ouvertes&#10;2. Glissez-déposez pour réorganiser&#10;3. Appliquer à la taskbar : Réorganise la barre des tâches Windows">💡</span>
                         </div>
                         <ul id="window-list" class="window-list">
                             <!-- Windows will be populated here -->
@@ -59,14 +59,14 @@
 
                         <div class="sidebar-section">
                             <h3>⚡ Actions</h3>
-                            <button id="refresh-btn" class="sidebar-btn sidebar-btn-primary">
-                                <span>🔄</span> Actualiser
+                            <button id="refresh-btn" class="sidebar-btn sidebar-btn-primary" title="Détecter les fenêtres Dofus actuellement ouvertes">
+                                <span>🔍</span> Scanner
                             </button>
-                            <button id="minimize-btn" class="sidebar-btn sidebar-btn-secondary" onclick="minimizeToTray()">
+                            <button id="apply-order-btn" class="sidebar-btn sidebar-btn-success" disabled title="Réorganiser la barre des tâches Windows selon l'ordre ci-dessus">
+                                <span>📌</span> Appliquer à la taskbar
+                            </button>
+                            <button id="minimize-btn" class="sidebar-btn sidebar-btn-secondary" onclick="minimizeToTray()" title="Réduire dans la zone de notification">
                                 <span>📱</span> Réduire
-                            </button>
-                            <button id="apply-order-btn" class="sidebar-btn sidebar-btn-success" style="display: none;">
-                                <span>✓</span> Appliquer l'Ordre
                             </button>
                         </div>
 
