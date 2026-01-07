@@ -2550,10 +2550,10 @@ async function initOcre() {
         apiKeyInput.value = savedApiKey;
     }
 
-    // Charger le hotkey sauvegardé
-    const hotkeyInput = document.getElementById('ocre-capture-hotkey');
-    if (hotkeyInput) {
-        hotkeyInput.value = ocreCaptureHotkey;
+    // Charger et afficher le hotkey sauvegardé
+    const hotkeyDisplay = document.getElementById('ocre-capture-hotkey-display');
+    if (hotkeyDisplay) {
+        hotkeyDisplay.textContent = ocreCaptureHotkey;
     }
 
     // Charger les monstres depuis le backend
@@ -2577,7 +2577,8 @@ async function initOcre() {
     // Configurer les event listeners
     setupOcreEventListeners();
 
-    // Enregistrer le hotkey global
+    // Enregistrer le hotkey global au démarrage
+    log('[Ocre] Enregistrement du hotkey au démarrage:', ocreCaptureHotkey);
     await ocreRegisterHotkey(ocreCaptureHotkey);
 
     // Écouter l'événement de hotkey depuis le backend
@@ -2941,6 +2942,10 @@ function ocreClearSignatures() {
     log('[Ocre] Historique des signatures effacé');
 }
 
+// Variable pour stocker les lignes en attente de validation
+let ocrePendingLines = null;
+let ocrePendingSignature = null;
+
 // Capturer l'écran et lancer l'OCR automatiquement
 async function ocreCaptureAndProcess() {
     log('[Ocre] Début de la capture OCR automatique...');
@@ -2952,7 +2957,7 @@ async function ocreCaptureAndProcess() {
         resultsPanel.style.display = 'block';
     }
     if (resultsContent) {
-        resultsContent.innerHTML = '<div class="ocre-loading">Capture et reconnaissance en cours...<br><small>Survolez la pierre d\'âme dans le jeu</small></div>';
+        resultsContent.innerHTML = '<div class="ocre-loading">Capture en cours...</div>';
     }
 
     try {
@@ -2962,36 +2967,76 @@ async function ocreCaptureAndProcess() {
 
         if (lines.length === 0) {
             if (resultsContent) {
-                resultsContent.innerHTML = '<div class="ocre-error">Aucun texte détecté.<br><br><small>Assurez-vous que la pierre d\'âme est visible à l\'écran.</small></div>';
+                resultsContent.innerHTML = '<div class="ocre-error">Aucun texte détecté.</div>';
             }
             return;
         }
 
-        // Étape 2: Générer la signature et vérifier les doublons
+        // Générer la signature pour vérification doublon
         const signature = ocreGenerateSignature(lines);
-        log('[Ocre] Signature de la pierre:', signature.substring(0, 50) + '...');
 
         if (signature && ocreIsDuplicatePierre(signature)) {
             log('[Ocre] Pierre déjà capturée! (doublon détecté)');
             if (resultsContent) {
                 resultsContent.innerHTML = '<div class="ocre-warning">' +
-                    '<strong>⚠️ Pierre déjà capturée!</strong><br><br>' +
-                    'Cette pierre d\'âme a déjà été ajoutée à votre progression.<br>' +
+                    '<strong>⚠️ Pierre déjà capturée!</strong><br>' +
                     'Les monstres n\'ont pas été comptés à nouveau.' +
                     '</div>';
             }
             return;
         }
 
-        // Étape 3: Traiter les lignes (ajouter les monstres)
+        // Stocker pour validation
+        ocrePendingLines = lines;
+        ocrePendingSignature = signature;
+
+        // Afficher le texte capturé et demander validation
+        if (resultsContent) {
+            resultsContent.innerHTML =
+                '<div class="ocre-preview">' +
+                    '<div class="ocre-preview-title">Texte reconnu :</div>' +
+                    '<div class="ocre-preview-text">' +
+                        lines.map(l => '<div>' + l + '</div>').join('') +
+                    '</div>' +
+                    '<div class="ocre-preview-actions">' +
+                        '<button class="btn btn-success btn-sm" id="ocre-validate-btn" onclick="ocreValidateCapture()">✓ Valider (Entrée)</button>' +
+                        '<button class="btn btn-secondary btn-sm" onclick="ocreCancelCapture()">✕ Annuler</button>' +
+                    '</div>' +
+                '</div>';
+
+            // Focus pour permettre Entrée
+            document.getElementById('ocre-validate-btn')?.focus();
+        }
+
+    } catch (error) {
+        logError('[Ocre] Erreur lors de la capture OCR:', error);
+        if (resultsContent) {
+            resultsContent.innerHTML = '<div class="ocre-error">Erreur OCR: ' + error + '</div>';
+        }
+    }
+}
+
+// Valider la capture et traiter les monstres
+async function ocreValidateCapture() {
+    if (!ocrePendingLines) return;
+
+    const resultsContent = document.getElementById('ocre-results-content');
+    if (resultsContent) {
+        resultsContent.innerHTML = '<div class="ocre-loading">Traitement...</div>';
+    }
+
+    try {
         const minConfidence = 0.7;
-        const result = await invoke('ocre_process_captured_text', { lines, minConfidence });
+        const result = await invoke('ocre_process_captured_text', {
+            lines: ocrePendingLines,
+            minConfidence
+        });
 
         log('[Ocre] Résultat du traitement:', result);
 
-        // Étape 4: Sauvegarder la signature si des monstres ont été trouvés
-        if (result.matched_monsters && result.matched_monsters.length > 0) {
-            ocreSaveSignature(signature);
+        // Sauvegarder la signature si des monstres ont été trouvés
+        if (result.matched_monsters && result.matched_monsters.length > 0 && ocrePendingSignature) {
+            ocreSaveSignature(ocrePendingSignature);
         }
 
         // Afficher les résultats
@@ -3003,12 +3048,34 @@ async function ocreCaptureAndProcess() {
         ocreUpdateStatistics();
 
     } catch (error) {
-        logError('[Ocre] Erreur lors de la capture OCR:', error);
+        logError('[Ocre] Erreur lors du traitement:', error);
         if (resultsContent) {
-            resultsContent.innerHTML = '<div class="ocre-error">Erreur OCR: ' + error + '<br><br><small>Astuce : Assurez-vous que la fenêtre du jeu avec la pierre d\'âme est visible</small></div>';
+            resultsContent.innerHTML = '<div class="ocre-error">Erreur: ' + error + '</div>';
         }
+    } finally {
+        ocrePendingLines = null;
+        ocrePendingSignature = null;
     }
 }
+
+// Annuler la capture
+function ocreCancelCapture() {
+    ocrePendingLines = null;
+    ocrePendingSignature = null;
+    ocreCloseResults();
+}
+
+// Écouter la touche Entrée pour valider
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && ocrePendingLines) {
+        e.preventDefault();
+        ocreValidateCapture();
+    }
+    if (e.key === 'Escape' && ocrePendingLines) {
+        e.preventDefault();
+        ocreCancelCapture();
+    }
+});
 
 // Capturer une région spécifique
 async function ocreCaptureRegion(x, y, width, height) {
@@ -3176,11 +3243,14 @@ async function ocreResetProgress() {
 window.ocreSyncMonsters = ocreSyncMonsters;
 window.ocreClearSignatures = ocreClearSignatures;
 window.ocreCaptureAndProcess = ocreCaptureAndProcess;
+window.ocreValidateCapture = ocreValidateCapture;
+window.ocreCancelCapture = ocreCancelCapture;
 window.ocreCaptureRegion = ocreCaptureRegion;
 window.ocreCloseResults = ocreCloseResults;
 window.ocreUpdateQuantity = ocreUpdateQuantity;
 window.ocreExportProgress = ocreExportProgress;
 window.ocreImportProgress = ocreImportProgress;
 window.ocreResetProgress = ocreResetProgress;
+window.configureOcreCaptureHotkey = configureOcreCaptureHotkey;
 
 log('✓ Fonctions Ocre exposées');
