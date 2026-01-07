@@ -2725,20 +2725,36 @@ function ocreRenderMonsters() {
         card.className = 'ocre-monster-card' + (qty > 0 ? ' owned' : '');
         card.dataset.id = monster.id;
 
+        // Gérer les valeurs potentiellement undefined
+        const nom = monster.nom || 'Inconnu';
+        const type = monster.monster_type || monster.type || 'monstre';
+        const etape = monster.etape || '?';
+        const zone = monster.zone || '';
+        const souszone = monster.souszone || zone || 'Zone inconnue';
+        const imageUrl = monster.image_url || '';
+
+        // Traduction du type
+        const typeLabels = {
+            'monstre': 'Monstre',
+            'archimonstre': 'Archi',
+            'boss': 'Boss'
+        };
+        const typeLabel = typeLabels[type] || type;
+
         card.innerHTML =
             '<div class="ocre-monster-image">' +
-                '<img src="' + monster.image_url + '" alt="' + monster.nom + '" onerror="this.src=\'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2250%22 height=%2250%22><rect fill=%22%23333%22 width=%2250%22 height=%2250%22/><text x=%2225%22 y=%2230%22 text-anchor=%22middle%22 fill=%22%23666%22>?</text></svg>\'">' +
+                (imageUrl ? '<img src="' + imageUrl + '" alt="' + nom + '" loading="lazy" onerror="this.style.display=\'none\'">' : '') +
             '</div>' +
             '<div class="ocre-monster-info">' +
-                '<div class="ocre-monster-name" title="' + monster.nom + '">' + monster.nom + '</div>' +
+                '<div class="ocre-monster-name" title="' + nom + '">' + nom + '</div>' +
                 '<div class="ocre-monster-meta">' +
-                    '<span class="ocre-monster-type ' + monster.monster_type + '">' + monster.monster_type + '</span>' +
-                    '<span class="ocre-monster-etape">Étape ' + monster.etape + '</span>' +
+                    '<span class="ocre-monster-type ' + type + '">' + typeLabel + '</span>' +
+                    '<span class="ocre-monster-etape">Ét. ' + etape + '</span>' +
                 '</div>' +
-                '<div class="ocre-monster-zone" title="' + monster.zone + ' - ' + monster.souszone + '">' + monster.souszone + '</div>' +
+                '<div class="ocre-monster-zone" title="' + zone + (souszone !== zone ? ' - ' + souszone : '') + '">' + souszone + '</div>' +
             '</div>' +
             '<div class="ocre-monster-quantity">' +
-                '<button class="ocre-qty-btn minus" onclick="ocreUpdateQuantity(' + monster.id + ', -1)">-</button>' +
+                '<button class="ocre-qty-btn minus" onclick="ocreUpdateQuantity(' + monster.id + ', -1)">−</button>' +
                 '<span class="ocre-qty-value">' + qty + '</span>' +
                 '<button class="ocre-qty-btn plus" onclick="ocreUpdateQuantity(' + monster.id + ', 1)">+</button>' +
             '</div>';
