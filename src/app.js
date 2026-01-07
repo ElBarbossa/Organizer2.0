@@ -3571,9 +3571,31 @@ async function ocreImportProgress() {
     input.click();
 }
 
-// Réinitialiser la progression
+// Réinitialiser uniquement les possédés (garder les pierres)
+async function ocreClearOwned() {
+    if (!confirm('Effacer tous les monstres possédés ?\n\nLes pierres capturées seront conservées.')) {
+        return;
+    }
+
+    try {
+        await invoke('ocre_reset_progress');
+
+        ocreProgress = {};
+        // NE PAS effacer les pierres
+        ocreRenderMonsters();
+        ocreUpdateStatistics();
+
+        log('[Ocre] Monstres possédés effacés');
+        alert('Monstres possédés effacés.');
+    } catch (error) {
+        logError('[Ocre] Erreur:', error);
+        alert('Erreur: ' + error);
+    }
+}
+
+// Réinitialiser tout (progression + pierres)
 async function ocreResetProgress() {
-    if (!confirm('Êtes-vous sûr de vouloir réinitialiser toute votre progression ?\n\nCette action est irréversible !')) {
+    if (!confirm('Réinitialiser TOUT ?\n\n• Monstres possédés\n• Pierres capturées\n\nCette action est irréversible !')) {
         return;
     }
 
@@ -3611,6 +3633,7 @@ window.ocreUpdateQuantity = ocreUpdateQuantity;
 window.ocreExportProgress = ocreExportProgress;
 window.ocreImportProgress = ocreImportProgress;
 window.ocreResetProgress = ocreResetProgress;
+window.ocreClearOwned = ocreClearOwned;
 window.configureOcreCaptureHotkey = configureOcreCaptureHotkey;
 
 log('✓ Fonctions Ocre exposées');
