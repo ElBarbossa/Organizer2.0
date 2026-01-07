@@ -675,6 +675,36 @@ fn ocre_get_progress(state: tauri::State<AppState>) -> Result<Vec<ocre_manager::
     Ok(progress)
 }
 
+/// Get screen dimensions for zone configuration
+#[tauri::command]
+fn get_screen_dimensions() -> Result<(u32, u32), String> {
+    use windows::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_CXSCREEN, SM_CYSCREEN};
+    unsafe {
+        let width = GetSystemMetrics(SM_CXSCREEN) as u32;
+        let height = GetSystemMetrics(SM_CYSCREEN) as u32;
+        if width == 0 || height == 0 {
+            return Err("Failed to get screen dimensions".to_string());
+        }
+        Ok((width, height))
+    }
+}
+
+/// Capture a specific zone and perform OCR
+#[tauri::command]
+async fn ocre_capture_zone_ocr(x: i32, y: i32, width: u32, height: u32) -> Result<Vec<String>, String> {
+    println!("[Ocre] Starting zone capture OCR at ({}, {}) {}x{}...", x, y, width, height);
+
+    let lines = tauri::async_runtime::spawn_blocking(move || {
+        screen_capture::capture_region_and_ocr(x, y, width, height)
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
+    .map_err(|e| format!("Failed to capture zone and OCR: {}", e))?;
+
+    println!("[Ocre] Zone OCR extracted {} lines", lines.len());
+    Ok(lines)
+}
+
 /// Register OCR capture hotkey
 #[tauri::command]
 fn ocre_register_hotkey(
@@ -797,6 +827,8 @@ fn main() {
             ocre_capture_and_recognize,
             ocre_capture_region_and_recognize,
             ocre_get_progress,
+            ocre_capture_zone_ocr,
+            get_screen_dimensions,
             ocre_register_hotkey,
             ocre_unregister_hotkey,
         ])

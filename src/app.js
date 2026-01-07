@@ -2527,6 +2527,13 @@ let ocreCurrentFilter = { type: 'all', search: '', status: 'all' };
 let ocreCaptureHotkey = localStorage.getItem('ocre_capture_hotkey') || 'F8';
 let ocreCapturedSignatures = JSON.parse(localStorage.getItem('ocre_captured_signatures') || '[]');
 
+// Zone de capture personnalisée (null = zone par défaut au centre)
+let ocreCaptureZone = JSON.parse(localStorage.getItem('ocre_capture_zone') || 'null');
+let ocreScreenDimensions = null;
+let ocreZoneSelecting = false;
+let ocreZoneStartX = 0;
+let ocreZoneStartY = 0;
+
 // Helper: Recharger la progression depuis le backend
 async function ocreReloadProgress() {
     try {
@@ -2590,6 +2597,9 @@ async function initOcre() {
     } catch (error) {
         logError('[Ocre] Erreur lors du chargement:', error);
     }
+
+    // Afficher la zone de capture configurée
+    ocreUpdateZoneDisplay();
 
     // Configurer les event listeners
     setupOcreEventListeners();
@@ -3079,6 +3089,205 @@ function ocreCleanInvalidPierres() {
     ocreRenderPierres();
 }
 
+// ============================================================================
+// Zone de capture personnalisée
+// ============================================================================
+
+// Ouvrir le modal de configuration de zone
+async function ocreConfigureZone() {
+    const modal = document.getElementById('ocre-zone-modal');
+    if (!modal) return;
+
+    // Récupérer les dimensions de l'écran
+    try {
+        ocreScreenDimensions = await invoke('get_screen_dimensions');
+        log('[Ocre] Screen dimensions:', ocreScreenDimensions);
+    } catch (error) {
+        logError('[Ocre] Erreur récupération dimensions:', error);
+        ocreScreenDimensions = [1920, 1080]; // Fallback
+    }
+
+    // Prendre une capture d'écran pour le fond
+    try {
+        const base64 = await invoke('ocre_capture_screenshot');
+        const canvas = document.getElementById('ocre-zone-canvas');
+        const container = document.getElementById('ocre-zone-canvas-container');
+        const ctx = canvas.getContext('2d');
+
+        const img = new Image();
+        img.onload = function() {
+            // Redimensionner le canvas pour afficher l'image à une taille raisonnable
+            const maxWidth = window.innerWidth * 0.85;
+            const maxHeight = window.innerHeight * 0.6;
+            const scale = Math.min(maxWidth / img.width, maxHeight / img.height, 1);
+
+            canvas.width = img.width * scale;
+            canvas.height = img.height * scale;
+            canvas.dataset.scale = scale;
+            canvas.dataset.origWidth = img.width;
+            canvas.dataset.origHeight = img.height;
+
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+            // Afficher la zone actuelle si elle existe
+            ocreDrawCurrentZone();
+        };
+        img.src = 'data:image/png;base64,' + base64;
+    } catch (error) {
+        logError('[Ocre] Erreur capture écran:', error);
+    }
+
+    // Ajouter les événements de sélection
+    const canvas = document.getElementById('ocre-zone-canvas');
+    canvas.onmousedown = ocreZoneMouseDown;
+    canvas.onmousemove = ocreZoneMouseMove;
+    canvas.onmouseup = ocreZoneMouseUp;
+    canvas.onmouseleave = ocreZoneMouseUp;
+
+    modal.style.display = 'flex';
+    ocreUpdateZoneDisplay();
+}
+
+// Fermer le modal
+function ocreCloseZoneModal() {
+    const modal = document.getElementById('ocre-zone-modal');
+    if (modal) modal.style.display = 'none';
+}
+
+// Dessiner la zone actuelle sur le canvas
+function ocreDrawCurrentZone() {
+    const selection = document.getElementById('ocre-zone-selection');
+    const canvas = document.getElementById('ocre-zone-canvas');
+    if (!selection || !canvas || !ocreCaptureZone) {
+        if (selection) selection.style.display = 'none';
+        return;
+    }
+
+    const scale = parseFloat(canvas.dataset.scale) || 1;
+    selection.style.display = 'block';
+    selection.style.left = (ocreCaptureZone.x * scale) + 'px';
+    selection.style.top = (ocreCaptureZone.y * scale) + 'px';
+    selection.style.width = (ocreCaptureZone.width * scale) + 'px';
+    selection.style.height = (ocreCaptureZone.height * scale) + 'px';
+}
+
+// Événements de sélection de zone
+function ocreZoneMouseDown(e) {
+    const canvas = document.getElementById('ocre-zone-canvas');
+    const rect = canvas.getBoundingClientRect();
+    ocreZoneSelecting = true;
+    ocreZoneStartX = e.clientX - rect.left;
+    ocreZoneStartY = e.clientY - rect.top;
+
+    const selection = document.getElementById('ocre-zone-selection');
+    selection.style.display = 'block';
+    selection.style.left = ocreZoneStartX + 'px';
+    selection.style.top = ocreZoneStartY + 'px';
+    selection.style.width = '0px';
+    selection.style.height = '0px';
+}
+
+function ocreZoneMouseMove(e) {
+    if (!ocreZoneSelecting) return;
+
+    const canvas = document.getElementById('ocre-zone-canvas');
+    const rect = canvas.getBoundingClientRect();
+    const currentX = e.clientX - rect.left;
+    const currentY = e.clientY - rect.top;
+
+    const selection = document.getElementById('ocre-zone-selection');
+    const left = Math.min(ocreZoneStartX, currentX);
+    const top = Math.min(ocreZoneStartY, currentY);
+    const width = Math.abs(currentX - ocreZoneStartX);
+    const height = Math.abs(currentY - ocreZoneStartY);
+
+    selection.style.left = left + 'px';
+    selection.style.top = top + 'px';
+    selection.style.width = width + 'px';
+    selection.style.height = height + 'px';
+
+    // Mettre à jour l'affichage des coordonnées en temps réel
+    const scale = parseFloat(canvas.dataset.scale) || 1;
+    const realX = Math.round(left / scale);
+    const realY = Math.round(top / scale);
+    const realW = Math.round(width / scale);
+    const realH = Math.round(height / scale);
+
+    const coords = document.getElementById('ocre-zone-coords');
+    if (coords) {
+        coords.textContent = `Zone: ${realW}x${realH} à (${realX}, ${realY})`;
+    }
+}
+
+function ocreZoneMouseUp(e) {
+    if (!ocreZoneSelecting) return;
+    ocreZoneSelecting = false;
+
+    const canvas = document.getElementById('ocre-zone-canvas');
+    const rect = canvas.getBoundingClientRect();
+    const currentX = e.clientX - rect.left;
+    const currentY = e.clientY - rect.top;
+
+    const scale = parseFloat(canvas.dataset.scale) || 1;
+    const left = Math.min(ocreZoneStartX, currentX);
+    const top = Math.min(ocreZoneStartY, currentY);
+    const width = Math.abs(currentX - ocreZoneStartX);
+    const height = Math.abs(currentY - ocreZoneStartY);
+
+    // Convertir en coordonnées réelles de l'écran
+    const realX = Math.round(left / scale);
+    const realY = Math.round(top / scale);
+    const realW = Math.round(width / scale);
+    const realH = Math.round(height / scale);
+
+    // Sauvegarder temporairement la zone (pas encore dans localStorage)
+    if (realW > 50 && realH > 50) {
+        ocreCaptureZone = { x: realX, y: realY, width: realW, height: realH };
+        log('[Ocre] Zone sélectionnée:', ocreCaptureZone);
+    }
+
+    ocreUpdateZoneDisplay();
+}
+
+// Réinitialiser la zone (utiliser le centre par défaut)
+function ocreResetZone() {
+    ocreCaptureZone = null;
+    localStorage.removeItem('ocre_capture_zone');
+
+    const selection = document.getElementById('ocre-zone-selection');
+    if (selection) selection.style.display = 'none';
+
+    ocreUpdateZoneDisplay();
+    log('[Ocre] Zone réinitialisée (centre par défaut)');
+}
+
+// Sauvegarder la zone
+function ocreSaveZone() {
+    if (ocreCaptureZone) {
+        localStorage.setItem('ocre_capture_zone', JSON.stringify(ocreCaptureZone));
+        log('[Ocre] Zone sauvegardée:', ocreCaptureZone);
+    } else {
+        localStorage.removeItem('ocre_capture_zone');
+    }
+    ocreCloseZoneModal();
+    ocreUpdateZoneDisplay();
+}
+
+// Mettre à jour l'affichage de la zone dans l'UI
+function ocreUpdateZoneDisplay() {
+    const display = document.getElementById('ocre-zone-display');
+    const coords = document.getElementById('ocre-zone-coords');
+
+    if (ocreCaptureZone) {
+        const zoneText = `${ocreCaptureZone.width}x${ocreCaptureZone.height} à (${ocreCaptureZone.x}, ${ocreCaptureZone.y})`;
+        if (display) display.textContent = zoneText;
+        if (coords) coords.textContent = 'Zone: ' + zoneText;
+    } else {
+        if (display) display.textContent = 'Centre de l\'écran (par défaut)';
+        if (coords) coords.textContent = 'Zone: Non définie (centre par défaut)';
+    }
+}
+
 // File d'attente des captures en attente de validation
 let ocrePendingCaptures = []; // [{lines, signature, monsterNames}, ...]
 
@@ -3159,8 +3368,18 @@ async function ocreCaptureAndProcess() {
     ocreRenderPendingQueue('Capture en cours...');
 
     try {
-        // Capturer et faire l'OCR
-        const lines = await invoke('ocre_capture_ocr_only');
+        // Utiliser la zone personnalisée si définie, sinon la capture par défaut
+        let lines;
+        if (ocreCaptureZone) {
+            lines = await invoke('ocre_capture_zone_ocr', {
+                x: ocreCaptureZone.x,
+                y: ocreCaptureZone.y,
+                width: ocreCaptureZone.width,
+                height: ocreCaptureZone.height
+            });
+        } else {
+            lines = await invoke('ocre_capture_ocr_only');
+        }
         log('[Ocre] Lignes OCR capturées:', lines.length);
 
         if (lines.length === 0) {
@@ -3363,7 +3582,19 @@ async function ocreCaptureWithChangeDetection() {
     ocreIsCapturing = true;
 
     try {
-        const lines = await invoke('ocre_capture_ocr_only');
+        // Utiliser la zone personnalisée si définie, sinon la capture par défaut
+        let lines;
+        if (ocreCaptureZone) {
+            lines = await invoke('ocre_capture_zone_ocr', {
+                x: ocreCaptureZone.x,
+                y: ocreCaptureZone.y,
+                width: ocreCaptureZone.width,
+                height: ocreCaptureZone.height
+            });
+        } else {
+            lines = await invoke('ocre_capture_ocr_only');
+        }
+
         if (lines.length === 0) {
             ocreIsCapturing = false;
             return;

@@ -130,6 +130,15 @@
                                 <input type="range" id="ocre-confidence" min="50" max="100" value="70">
                                 <span id="ocre-confidence-value">70%</span>
                             </div>
+                            <div class="ocre-zone-config" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.1);">
+                                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                                    <span>📐 Zone de capture:</span>
+                                    <button class="btn btn-secondary btn-sm" onclick="ocreConfigureZone()">Configurer</button>
+                                </div>
+                                <div id="ocre-zone-display" class="ocre-zone-display" style="font-size: 11px; opacity: 0.7;">
+                                    Centre de l'écran (par défaut)
+                                </div>
+                            </div>
                         </div>
 
                         <!-- Import/Export -->
@@ -391,6 +400,30 @@
         <footer class="app-footer">
             <p>⚡ Utilisation minimale des ressources • 🚫 Pas d'automatisation • ✅ Conforme CGU</p>
         </footer>
+    </div>
+
+    <!-- Zone Selector Modal -->
+    <div id="ocre-zone-modal" class="ocre-zone-modal" style="display: none;">
+        <div class="ocre-zone-modal-content">
+            <div class="ocre-zone-modal-header">
+                <h3>📐 Configurer la zone de capture</h3>
+                <button class="btn btn-secondary btn-sm" onclick="ocreCloseZoneModal()">✕</button>
+            </div>
+            <div class="ocre-zone-modal-body">
+                <p style="margin-bottom: 15px; opacity: 0.8;">Dessinez un rectangle sur la capture d'écran pour définir la zone de capture OCR.</p>
+                <div class="ocre-zone-canvas-container" id="ocre-zone-canvas-container">
+                    <canvas id="ocre-zone-canvas"></canvas>
+                    <div id="ocre-zone-selection" class="ocre-zone-selection" style="display: none;"></div>
+                </div>
+                <div class="ocre-zone-coords" id="ocre-zone-coords" style="margin-top: 10px; font-family: monospace; font-size: 12px;">
+                    Zone: Non définie
+                </div>
+            </div>
+            <div class="ocre-zone-modal-footer">
+                <button class="btn btn-secondary" onclick="ocreResetZone()">🔄 Réinitialiser (centre)</button>
+                <button class="btn btn-primary" onclick="ocreSaveZone()">💾 Enregistrer</button>
+            </div>
+        </div>
     </div>
 
     <script src="app.js"></script>
