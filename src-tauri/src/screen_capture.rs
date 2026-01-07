@@ -55,7 +55,7 @@ impl Screenshot {
                 &img,
                 self.width,
                 self.height,
-                image::ExtendedColorType::Rgba8,
+                image::ColorType::Rgba8,
             )
             .context("Failed to encode PNG")?;
 
