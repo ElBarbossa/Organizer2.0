@@ -3617,7 +3617,13 @@ async function ocreCaptureWithChangeDetection() {
         log('[Ocre] Monstres extraits:', monsterNames.length, '-', monsterNames.join(', '));
 
         if (monsterNames.length === 0) {
-            log('[Ocre] Rejet: aucun monstre extrait. Lignes:', lines.slice(0, 8).join(' | '));
+            // Chercher les lignes qui ressemblent à des monstres (contiennent un niveau)
+            const potentialMonsters = lines.filter(l => /\(\d+\)/.test(l));
+            if (potentialMonsters.length > 0) {
+                log('[Ocre] Rejet mais lignes avec (niveau) trouvées:', potentialMonsters.join(' | '));
+            } else {
+                log('[Ocre] Rejet: aucun monstre. Toutes les lignes:', lines.join(' | '));
+            }
             ocreIsCapturing = false;
             return;
         }
