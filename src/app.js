@@ -2942,18 +2942,22 @@ async function ocreUpdateStatistics() {
 function ocreGenerateSignature(lines) {
     // Mots-clés à exclure (UI, bonus, etc.)
     const excludeKeywords = [
-        'bonus', 'récompense', 'effets', 'poids', 'prix', 'kamas',
-        'niveau', 'level', 'xp', 'experience', 'points',
-        'fermer', 'annuler', 'valider', 'ok', 'retour',
-        'inventaire', 'équipement', 'options', 'paramètres'
+        'bonus', 'récompense', 'poids', 'prix', 'kamas',
+        'level', 'xp', 'experience', 'points',
+        'fermer', 'annuler', 'valider', 'retour',
+        'inventaire', 'équipement', 'paramètres',
+        'groupe', 'guilde', 'alliance', 'amis', 'contacts',
+        'quête', 'mission', 'objectif', 'succès',
+        'combat', 'tour', 'pa ', 'pm ', ' pa', ' pm',
+        'vie', 'énergie', 'pods'
     ];
 
-    // Pattern strict pour "Nom (niveau)" où niveau est 1-400
-    const monsterPattern = /^(.+?)\s*\((\d{1,3})\)$/;
+    // Pattern plus souple pour "Nom (niveau)"
+    const monsterPattern = /^(.+?)\s*[\(\[\{](\d{1,3})[\)\]\}]$/;
 
     // Filtrer et normaliser les lignes
     const validLines = lines
-        .map(line => line.trim())
+        .map(line => line.trim().replace(/\s+/g, ' '))
         .filter(line => {
             if (!line || line.length < 4) return false;
 
@@ -3295,21 +3299,21 @@ let ocrePendingCaptures = []; // [{lines, signature, monsterNames}, ...]
 function ocreExtractMonsterNames(lines) {
     // Mots-clés à exclure (UI, bonus, etc.)
     const excludeKeywords = [
-        'bonus', 'récompense', 'effets', 'poids', 'prix', 'kamas',
-        'niveau', 'level', 'xp', 'experience', 'points',
-        'fermer', 'annuler', 'valider', 'ok', 'retour',
-        'inventaire', 'équipement', 'options', 'paramètres',
+        'bonus', 'récompense', 'poids', 'prix', 'kamas',
+        'level', 'xp', 'experience', 'points',
+        'fermer', 'annuler', 'valider', 'retour',
+        'inventaire', 'équipement', 'paramètres',
         'groupe', 'guilde', 'alliance', 'amis', 'contacts',
         'quête', 'mission', 'objectif', 'succès',
         'combat', 'tour', 'pa ', 'pm ', ' pa', ' pm',
-        'vie', 'énergie', 'pods', 'poids'
+        'vie', 'énergie', 'pods'
     ];
 
-    // Pattern strict pour "Nom (niveau)" où niveau est entre 1 et 400
-    const monsterPattern = /^(.+?)\s*\((\d{1,3})\)$/;
+    // Pattern plus souple pour "Nom (niveau)" - accepte espaces et caractères spéciaux
+    const monsterPattern = /^(.+?)\s*[\(\[\{](\d{1,3})[\)\]\}]$/;
 
     const candidates = lines
-        .map(line => line.trim())
+        .map(line => line.trim().replace(/\s+/g, ' ')) // Normaliser les espaces
         .filter(line => {
             if (!line || line.length < 4) return false;
 
@@ -3318,9 +3322,15 @@ function ocreExtractMonsterNames(lines) {
             // Exclure les lignes avec des mots-clés UI
             if (excludeKeywords.some(kw => lower.includes(kw))) return false;
 
-            // Vérifier le pattern strict
+            // Vérifier le pattern
             const match = line.match(monsterPattern);
-            if (!match) return false;
+            if (!match) {
+                // Debug: si la ligne contient des parenthèses avec chiffres, logger pourquoi ça ne match pas
+                if (/\(\d+\)/.test(line) || /\[\d+\]/.test(line)) {
+                    log('[Ocre] Debug - Ligne avec niveau non matchée:', JSON.stringify(line));
+                }
+                return false;
+            }
 
             // Vérifier que le niveau est raisonnable (1-400)
             const level = parseInt(match[2], 10);
@@ -3331,7 +3341,7 @@ function ocreExtractMonsterNames(lines) {
             if (name.length < 2) return false;
 
             // Exclure si le nom contient des caractères suspects
-            if (/[<>{}[\]|\\]/.test(name)) return false;
+            if (/[<>{}|\\]/.test(name)) return false;
 
             return true;
         });
