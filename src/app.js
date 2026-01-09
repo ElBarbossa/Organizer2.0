@@ -2940,16 +2940,14 @@ async function ocreUpdateStatistics() {
 
 // Générer une signature unique pour une pierre (ordre exact des lignes)
 function ocreGenerateSignature(lines) {
-    // Mots-clés à exclure (UI, bonus, etc.)
-    const excludeKeywords = [
-        'bonus', 'récompense', 'poids', 'prix', 'kamas',
-        'level', 'xp', 'experience', 'points',
+    // Phrases exactes à exclure (UI, bonus, etc.) - doit commencer par ces mots
+    const excludePhrases = [
+        'bonus de', 'récompense', 'poids', 'prix moyen', 'kamas',
         'fermer', 'annuler', 'valider', 'retour',
-        'inventaire', 'équipement', 'paramètres',
+        'inventaire', 'équipement', 'paramètres', 'options',
         'groupe', 'guilde', 'alliance', 'amis', 'contacts',
         'quête', 'mission', 'objectif', 'succès',
-        'combat', 'tour', 'pa ', 'pm ', ' pa', ' pm',
-        'vie', 'énergie', 'pods'
+        'cette pierre', 'catégories', 'épingler', 'valeurs'
     ];
 
     // Pattern plus souple pour "Nom (niveau)"
@@ -2962,7 +2960,7 @@ function ocreGenerateSignature(lines) {
             if (!line || line.length < 4) return false;
 
             const lower = line.toLowerCase();
-            if (excludeKeywords.some(kw => lower.includes(kw))) return false;
+            if (excludePhrases.some(phrase => lower.startsWith(phrase))) return false;
 
             const match = line.match(monsterPattern);
             if (!match) return false;
@@ -3297,16 +3295,14 @@ let ocrePendingCaptures = []; // [{lines, signature, monsterNames}, ...]
 
 // Extraire uniquement les noms de monstres (format "Nom (niveau)")
 function ocreExtractMonsterNames(lines) {
-    // Mots-clés à exclure (UI, bonus, etc.)
-    const excludeKeywords = [
-        'bonus', 'récompense', 'poids', 'prix', 'kamas',
-        'level', 'xp', 'experience', 'points',
+    // Phrases exactes à exclure (UI, bonus, etc.) - doit commencer par ces mots
+    const excludePhrases = [
+        'bonus de', 'récompense', 'poids', 'prix moyen', 'kamas',
         'fermer', 'annuler', 'valider', 'retour',
-        'inventaire', 'équipement', 'paramètres',
+        'inventaire', 'équipement', 'paramètres', 'options',
         'groupe', 'guilde', 'alliance', 'amis', 'contacts',
         'quête', 'mission', 'objectif', 'succès',
-        'combat', 'tour', 'pa ', 'pm ', ' pa', ' pm',
-        'vie', 'énergie', 'pods'
+        'cette pierre', 'catégories', 'épingler', 'valeurs'
     ];
 
     // Pattern plus souple pour "Nom (niveau)" - accepte espaces et caractères spéciaux
@@ -3319,8 +3315,8 @@ function ocreExtractMonsterNames(lines) {
 
             const lower = line.toLowerCase();
 
-            // Exclure les lignes avec des mots-clés UI
-            if (excludeKeywords.some(kw => lower.includes(kw))) return false;
+            // Exclure les lignes qui COMMENCENT par des phrases UI
+            if (excludePhrases.some(phrase => lower.startsWith(phrase))) return false;
 
             // Vérifier le pattern
             const match = line.match(monsterPattern);
