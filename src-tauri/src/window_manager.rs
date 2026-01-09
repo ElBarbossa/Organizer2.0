@@ -10,7 +10,7 @@ use windows::Win32::System::Threading::{
 use windows::Win32::UI::WindowsAndMessaging::{
     EnumWindows, GetClassNameW, GetWindowTextW, GetWindowThreadProcessId, IsWindowVisible,
     SetForegroundWindow, AllowSetForegroundWindow, ShowWindow, SW_HIDE, SW_SHOW, SW_RESTORE,
-    GetForegroundWindow, BringWindowToTop, IsIconic,
+    GetForegroundWindow, BringWindowToTop, IsIconic, IsWindow,
 };
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP,
@@ -319,49 +319,89 @@ pub fn reorder_taskbar_windows(order: Vec<String>) -> Result<()> {
     println!("DEBUG: ========================================");
 
     unsafe {
+        // STEP 1: Validate all window handles first
+        println!("DEBUG: STEP 0 - Validating window handles...");
+        let valid_handles: Vec<(String, isize)> = ordered_handles
+            .into_iter()
+            .filter(|(name, handle)| {
+                let hwnd = HWND(*handle);
+                let is_valid = IsWindow(hwnd).as_bool();
+                if !is_valid {
+                    println!("DEBUG: WARNING - Invalid handle for window: {}", name);
+                }
+                is_valid
+            })
+            .collect();
+
+        if valid_handles.is_empty() {
+            println!("DEBUG: No valid windows to reorder after validation");
+            return Ok(());
+        }
+
+        println!("DEBUG: {} valid windows after validation", valid_handles.len());
+
         // STEP 1: Hide all windows to clear taskbar
         println!("DEBUG: STEP 1 - Hiding all windows to clear taskbar...");
 
-        for (index, (name, handle)) in ordered_handles.iter().enumerate() {
+        for (index, (name, handle)) in valid_handles.iter().enumerate() {
             let hwnd = HWND(*handle);
+
+            // Double-check handle is still valid
+            if !IsWindow(hwnd).as_bool() {
+                println!("DEBUG: Skipping invalid handle during hide: {}", name);
+                continue;
+            }
+
             let result = ShowWindow(hwnd, SW_HIDE);
-            println!("DEBUG: Hidden ({}/{}): {} (result: {})", index + 1, ordered_handles.len(), name, result.as_bool());
+            println!("DEBUG: Hidden ({}/{}): {} (result: {})", index + 1, valid_handles.len(), name, result.as_bool());
             // Small delay between hides
-            std::thread::sleep(std::time::Duration::from_millis(20));
+            std::thread::sleep(std::time::Duration::from_millis(30));
         }
 
         // Wait for Windows Shell to process the hide operations
         // Longer delay for more reliable Shell update
-        println!("DEBUG: Waiting 300ms for Windows Shell to process...");
-        std::thread::sleep(std::time::Duration::from_millis(300));
+        println!("DEBUG: Waiting 350ms for Windows Shell to process...");
+        std::thread::sleep(std::time::Duration::from_millis(350));
 
         // STEP 2: Show windows in the desired order
         println!("DEBUG: ========================================");
         println!("DEBUG: STEP 2 - Showing windows in desired order...");
 
-        for (index, (name, handle)) in ordered_handles.iter().enumerate() {
+        for (index, (name, handle)) in valid_handles.iter().enumerate() {
             let hwnd = HWND(*handle);
 
-            println!("DEBUG: Showing ({}/{}): {}", index + 1, ordered_handles.len(), name);
+            // Check handle is still valid before show
+            if !IsWindow(hwnd).as_bool() {
+                println!("DEBUG: Skipping invalid handle during show: {}", name);
+                continue;
+            }
+
+            println!("DEBUG: Showing ({}/{}): {}", index + 1, valid_handles.len(), name);
             let result = ShowWindow(hwnd, SW_SHOW);
             println!("DEBUG: ShowWindow result: {}", result.as_bool());
 
             // Delay between each show to ensure Windows processes them in order
-            std::thread::sleep(std::time::Duration::from_millis(80));
+            std::thread::sleep(std::time::Duration::from_millis(100));
         }
 
         // Wait for Windows to finish processing all shows
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        std::thread::sleep(std::time::Duration::from_millis(150));
 
         // STEP 3: Focus the first window using our improved focus function
-        if let Some((name, handle)) = ordered_handles.first() {
-            println!("DEBUG: ========================================");
-            println!("DEBUG: STEP 3 - Focusing first window: {}", name);
+        if let Some((name, handle)) = valid_handles.first() {
             let hwnd = HWND(*handle);
-            if force_foreground_window(hwnd) {
-                println!("DEBUG: Successfully focused first window: {}", name);
+
+            // Final validation before focus
+            if IsWindow(hwnd).as_bool() {
+                println!("DEBUG: ========================================");
+                println!("DEBUG: STEP 3 - Focusing first window: {}", name);
+                if force_foreground_window(hwnd) {
+                    println!("DEBUG: Successfully focused first window: {}", name);
+                } else {
+                    println!("DEBUG: Warning - Failed to focus first window: {}", name);
+                }
             } else {
-                println!("DEBUG: Warning - Failed to focus first window: {}", name);
+                println!("DEBUG: Cannot focus first window - handle invalid: {}", name);
             }
         }
     }
