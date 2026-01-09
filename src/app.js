@@ -3596,23 +3596,28 @@ async function ocreCaptureWithChangeDetection() {
         }
 
         if (lines.length === 0) {
+            log('[Ocre] Rejet: aucune ligne OCR détectée');
             ocreIsCapturing = false;
             return;
         }
 
+        log('[Ocre] OCR brut:', lines.length, 'lignes -', lines.slice(0, 3).join(' | '));
+
         const monsterNames = ocreExtractMonsterNames(lines);
         if (monsterNames.length === 0) {
+            log('[Ocre] Rejet: aucun monstre extrait des lignes:', lines.slice(0, 5).join(' | '));
             ocreIsCapturing = false;
             return;
         }
 
         const signature = ocreGenerateSignature(lines);
         if (!signature) {
+            log('[Ocre] Rejet: signature vide');
             ocreIsCapturing = false;
             return;
         }
 
-        // Même signature que la dernière capture? On ignore
+        // Même signature que la dernière capture? On ignore (silencieux car normal)
         if (signature === ocreLastCapturedSignature) {
             ocreIsCapturing = false;
             return;
@@ -3620,6 +3625,7 @@ async function ocreCaptureWithChangeDetection() {
 
         // Déjà enregistrée dans les pierres? On ignore
         if (ocreIsDuplicatePierre(signature)) {
+            log('[Ocre] Rejet: pierre déjà enregistrée -', monsterNames.slice(0, 2).join(', '));
             ocreLastCapturedSignature = signature;
             ocreIsCapturing = false;
             return;
@@ -3627,20 +3633,21 @@ async function ocreCaptureWithChangeDetection() {
 
         // Déjà dans la file d'attente? On ignore
         if (ocrePendingCaptures.some(c => c.signature === signature)) {
+            log('[Ocre] Rejet: déjà dans la file d\'attente');
             ocreLastCapturedSignature = signature;
             ocreIsCapturing = false;
             return;
         }
 
         // Nouvelle pierre détectée !
-        log('[Ocre] Nouvelle pierre détectée:', monsterNames.length, 'monstres');
+        log('[Ocre] AJOUT pierre:', monsterNames.length, 'monstres -', monsterNames.slice(0, 3).join(', '));
         ocreLastCapturedSignature = signature;
 
         ocrePendingCaptures.push({ lines, signature, monsterNames });
         ocreRenderPendingQueue();
 
     } catch (error) {
-        // Silencieux en mode auto
+        log('[Ocre] Erreur capture:', error);
     } finally {
         ocreIsCapturing = false;
     }
