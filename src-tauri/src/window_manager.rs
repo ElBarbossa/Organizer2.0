@@ -160,7 +160,11 @@ unsafe extern "system" fn enum_windows_proc(hwnd: HWND, lparam: LPARAM) -> BOOL 
 /// 2. Attach thread input to synchronize input queues
 /// 3. Simulate Alt key press to "unlock" the foreground
 /// 4. BringWindowToTop + SetForegroundWindow
+/// 5. Verify and retry if needed
 fn force_foreground_window(hwnd: HWND) -> bool {
+    const MAX_RETRIES: u32 = 3;
+    const RETRY_DELAY_MS: u64 = 50;
+
     unsafe {
         let current_thread_id = GetCurrentThreadId();
         let mut target_thread_id = 0u32;
@@ -176,59 +180,89 @@ fn force_foreground_window(hwnd: HWND) -> bool {
             std::thread::sleep(std::time::Duration::from_millis(50));
         }
 
-        // Step 2: Attach thread input FIRST (this is important for the Alt trick to work)
-        let attached = if target_thread_id != 0 && target_thread_id != current_thread_id {
-            AttachThreadInput(current_thread_id, target_thread_id, true).as_bool()
-        } else {
-            false
-        };
+        // Try multiple times with different techniques
+        for attempt in 0..MAX_RETRIES {
+            // Step 2: Attach thread input (important for the Alt trick to work)
+            let attached = if target_thread_id != 0 && target_thread_id != current_thread_id {
+                AttachThreadInput(current_thread_id, target_thread_id, true).as_bool()
+            } else {
+                false
+            };
 
-        // Step 3: Simulate Alt key press to unlock foreground
-        // This tricks Windows into thinking user interaction occurred
-        let alt_input = INPUT {
-            r#type: INPUT_KEYBOARD,
-            Anonymous: INPUT_0 {
-                ki: KEYBDINPUT {
-                    wVk: VK_MENU,
-                    wScan: 0,
-                    dwFlags: KEYBD_EVENT_FLAGS(0),
-                    time: 0,
-                    dwExtraInfo: 0,
+            // Step 3: Simulate Alt key press to unlock foreground
+            let alt_input = INPUT {
+                r#type: INPUT_KEYBOARD,
+                Anonymous: INPUT_0 {
+                    ki: KEYBDINPUT {
+                        wVk: VK_MENU,
+                        wScan: 0,
+                        dwFlags: KEYBD_EVENT_FLAGS(0),
+                        time: 0,
+                        dwExtraInfo: 0,
+                    },
                 },
-            },
-        };
-        let alt_up_input = INPUT {
-            r#type: INPUT_KEYBOARD,
-            Anonymous: INPUT_0 {
-                ki: KEYBDINPUT {
-                    wVk: VK_MENU,
-                    wScan: 0,
-                    dwFlags: KEYEVENTF_KEYUP,
-                    time: 0,
-                    dwExtraInfo: 0,
+            };
+            let alt_up_input = INPUT {
+                r#type: INPUT_KEYBOARD,
+                Anonymous: INPUT_0 {
+                    ki: KEYBDINPUT {
+                        wVk: VK_MENU,
+                        wScan: 0,
+                        dwFlags: KEYEVENTF_KEYUP,
+                        time: 0,
+                        dwExtraInfo: 0,
+                    },
                 },
-            },
-        };
-        SendInput(&[alt_input, alt_up_input], std::mem::size_of::<INPUT>() as i32);
+            };
+            SendInput(&[alt_input, alt_up_input], std::mem::size_of::<INPUT>() as i32);
 
-        // Step 4: Bring to top and set foreground (without TOPMOST to avoid flickering)
-        let _ = BringWindowToTop(hwnd);
-        let result = SetForegroundWindow(hwnd);
+            // Step 4: Bring to top and set foreground
+            let _ = BringWindowToTop(hwnd);
+            let _ = SetForegroundWindow(hwnd);
 
-        // Cleanup: Detach thread input if we attached it
-        if attached {
-            let _ = AttachThreadInput(current_thread_id, target_thread_id, false);
+            // Cleanup: Detach thread input if we attached it
+            if attached {
+                let _ = AttachThreadInput(current_thread_id, target_thread_id, false);
+            }
+
+            // Small delay to let Windows process the focus change
+            std::thread::sleep(std::time::Duration::from_millis(10));
+
+            // Step 5: Verify the window is actually in foreground
+            let current_fg = GetForegroundWindow();
+            if current_fg == hwnd {
+                println!("DEBUG: Window focused successfully on attempt {}", attempt + 1);
+                return true;
+            }
+
+            // If not successful, wait and retry
+            if attempt < MAX_RETRIES - 1 {
+                println!("DEBUG: Focus attempt {} failed, retrying...", attempt + 1);
+                std::thread::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS));
+            }
         }
 
-        result.as_bool()
+        // Final fallback: try ShowWindow with SW_SHOW
+        ShowWindow(hwnd, SW_SHOW);
+        let _ = SetForegroundWindow(hwnd);
+        std::thread::sleep(std::time::Duration::from_millis(10));
+
+        let final_check = GetForegroundWindow() == hwnd;
+        if !final_check {
+            println!("DEBUG: Failed to focus window after {} attempts", MAX_RETRIES);
+        }
+        final_check
     }
 }
 
 /// Bring a specific window to the foreground
 pub fn focus_window(handle: isize) -> Result<()> {
     let hwnd = HWND(handle);
-    force_foreground_window(hwnd);
-    Ok(())
+    if force_foreground_window(hwnd) {
+        Ok(())
+    } else {
+        Err(anyhow::anyhow!("Failed to bring window to foreground"))
+    }
 }
 
 /// Update window Z-order and taskbar order based on character names order
@@ -285,41 +319,50 @@ pub fn reorder_taskbar_windows(order: Vec<String>) -> Result<()> {
     println!("DEBUG: ========================================");
 
     unsafe {
-        // NEW APPROACH: Hide all windows, then show in desired order
+        // STEP 1: Hide all windows to clear taskbar
         println!("DEBUG: STEP 1 - Hiding all windows to clear taskbar...");
 
         for (index, (name, handle)) in ordered_handles.iter().enumerate() {
             let hwnd = HWND(*handle);
-            ShowWindow(hwnd, SW_HIDE);
-            println!("DEBUG: Hidden ({}/{}): {}", index + 1, ordered_handles.len(), name);
+            let result = ShowWindow(hwnd, SW_HIDE);
+            println!("DEBUG: Hidden ({}/{}): {} (result: {})", index + 1, ordered_handles.len(), name, result.as_bool());
+            // Small delay between hides
+            std::thread::sleep(std::time::Duration::from_millis(20));
         }
 
         // Wait for Windows Shell to process the hide operations
-        println!("DEBUG: Waiting 250ms for Windows to process...");
-        std::thread::sleep(std::time::Duration::from_millis(250));
+        // Longer delay for more reliable Shell update
+        println!("DEBUG: Waiting 300ms for Windows Shell to process...");
+        std::thread::sleep(std::time::Duration::from_millis(300));
 
-        // Show windows in the desired order (first to last)
-        // Windows should add them to the taskbar in this order
+        // STEP 2: Show windows in the desired order
         println!("DEBUG: ========================================");
         println!("DEBUG: STEP 2 - Showing windows in desired order...");
-
-        let current_pid = GetCurrentProcessId();
 
         for (index, (name, handle)) in ordered_handles.iter().enumerate() {
             let hwnd = HWND(*handle);
 
             println!("DEBUG: Showing ({}/{}): {}", index + 1, ordered_handles.len(), name);
-            ShowWindow(hwnd, SW_SHOW);
+            let result = ShowWindow(hwnd, SW_SHOW);
+            println!("DEBUG: ShowWindow result: {}", result.as_bool());
 
-            // For the first window, give it foreground to ensure it's fully visible
-            if index == 0 {
-                let _ = AllowSetForegroundWindow(current_pid);
-                SetForegroundWindow(hwnd);
-                println!("DEBUG: Set first window {} as foreground", name);
+            // Delay between each show to ensure Windows processes them in order
+            std::thread::sleep(std::time::Duration::from_millis(80));
+        }
+
+        // Wait for Windows to finish processing all shows
+        std::thread::sleep(std::time::Duration::from_millis(100));
+
+        // STEP 3: Focus the first window using our improved focus function
+        if let Some((name, handle)) = ordered_handles.first() {
+            println!("DEBUG: ========================================");
+            println!("DEBUG: STEP 3 - Focusing first window: {}", name);
+            let hwnd = HWND(*handle);
+            if force_foreground_window(hwnd) {
+                println!("DEBUG: Successfully focused first window: {}", name);
+            } else {
+                println!("DEBUG: Warning - Failed to focus first window: {}", name);
             }
-
-            // Small delay between each show to ensure Windows processes them in order
-            std::thread::sleep(std::time::Duration::from_millis(50));
         }
     }
 

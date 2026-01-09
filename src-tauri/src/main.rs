@@ -22,6 +22,7 @@ pub struct HotkeyConfig {
 use parking_lot::Mutex;
 use profile_manager::{Profile, ProfileManager};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use tauri::{AppHandle, CustomMenuItem, Manager, SystemTray, SystemTrayEvent, SystemTrayMenu, SystemTrayMenuItem};
 use window_manager::DofusWindow;
 
@@ -216,8 +217,8 @@ fn setup_custom_hotkeys(
     Ok(())
 }
 
-// Track current window index for cycling
-static mut CURRENT_WINDOW_INDEX: usize = 0;
+// Track current window index for cycling (thread-safe)
+static CURRENT_WINDOW_INDEX: AtomicUsize = AtomicUsize::new(0);
 
 /// Get the current foreground window handle
 fn get_foreground_window() -> Option<isize> {
@@ -319,7 +320,7 @@ fn handle_hotkey_action(
                 } else {
                     // Fallback to sequential cycling if no order defined
                     println!("DEBUG: No window order defined, using sequential cycling");
-                    let current_index = unsafe { CURRENT_WINDOW_INDEX };
+                    let current_index = CURRENT_WINDOW_INDEX.load(Ordering::SeqCst);
                     let target_index = match action {
                         HotkeyAction::NextWindow => (current_index + 1) % available_windows.len(),
                         HotkeyAction::PreviousWindow => {
@@ -331,13 +332,13 @@ fn handle_hotkey_action(
                         }
                         _ => unreachable!(),
                     };
-                    unsafe { CURRENT_WINDOW_INDEX = target_index; }
+                    CURRENT_WINDOW_INDEX.store(target_index, Ordering::SeqCst);
                     available_windows.get(target_index).cloned()
                 }
             } else {
                 // No profile, use sequential cycling
                 println!("DEBUG: No profile loaded, using sequential cycling");
-                let current_index = unsafe { CURRENT_WINDOW_INDEX };
+                let current_index = CURRENT_WINDOW_INDEX.load(Ordering::SeqCst);
                 let target_index = match action {
                     HotkeyAction::NextWindow => (current_index + 1) % available_windows.len(),
                     HotkeyAction::PreviousWindow => {
@@ -349,7 +350,7 @@ fn handle_hotkey_action(
                     }
                     _ => unreachable!(),
                 };
-                unsafe { CURRENT_WINDOW_INDEX = target_index; }
+                CURRENT_WINDOW_INDEX.store(target_index, Ordering::SeqCst);
                 available_windows.get(target_index).cloned()
             }
         }
