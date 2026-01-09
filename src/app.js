@@ -3601,16 +3601,20 @@ async function ocreCaptureWithChangeDetection() {
             return;
         }
 
-        log('[Ocre] OCR brut:', lines.length, 'lignes -', lines.slice(0, 3).join(' | '));
+        log('[Ocre] OCR brut:', lines.length, 'lignes');
 
         const monsterNames = ocreExtractMonsterNames(lines);
+        log('[Ocre] Monstres extraits:', monsterNames.length, '-', monsterNames.join(', '));
+
         if (monsterNames.length === 0) {
-            log('[Ocre] Rejet: aucun monstre extrait des lignes:', lines.slice(0, 5).join(' | '));
+            log('[Ocre] Rejet: aucun monstre extrait. Lignes:', lines.slice(0, 8).join(' | '));
             ocreIsCapturing = false;
             return;
         }
 
         const signature = ocreGenerateSignature(lines);
+        log('[Ocre] Signature:', signature ? signature.substring(0, 60) + '...' : 'VIDE');
+
         if (!signature) {
             log('[Ocre] Rejet: signature vide');
             ocreIsCapturing = false;
